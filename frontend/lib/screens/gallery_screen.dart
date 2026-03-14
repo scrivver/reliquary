@@ -82,6 +82,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
   }
 
+  Future<void> _openFile(FileItem file) async {
+    if (file.isImage) {
+      _viewFullImage(file);
+    } else {
+      // For non-image files, show a detail dialog with download option.
+      _showFileDetails(file);
+    }
+  }
+
   Future<void> _viewFullImage(FileItem file) async {
     try {
       final url = await _apiService.presignDownload(file.key);
@@ -103,6 +112,30 @@ class _GalleryScreenState extends State<GalleryScreen> {
         const SnackBar(content: Text('Failed to load image')),
       );
     }
+  }
+
+  void _showFileDetails(FileItem file) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(file.filename),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Type: ${file.contentType}'),
+            Text('Size: ${_formatSize(file.size)}'),
+            Text('Uploaded: ${file.lastModified.toLocal()}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _logout() async {
@@ -180,12 +213,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
           return _FileTile(
             file: file,
             apiService: _apiService,
-            onTap: () => _viewFullImage(file),
+            onTap: () => _openFile(file),
             onDelete: () => _deleteFile(file),
           );
         },
       ),
     );
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
 
@@ -212,13 +251,15 @@ class _FileTileState extends State<_FileTile> {
   @override
   void initState() {
     super.initState();
-    _loadThumbnail();
+    if (widget.file.thumbnailKey != null) {
+      _loadThumbnail();
+    }
   }
 
   Future<void> _loadThumbnail() async {
     try {
       final url =
-          await widget.apiService.presignDownload(widget.file.thumbnailKey);
+          await widget.apiService.presignDownload(widget.file.thumbnailKey!);
       if (mounted) setState(() => _thumbUrl = url);
     } catch (_) {
       // Thumbnail may not exist yet; ignore.
@@ -251,16 +292,35 @@ class _FileTileState extends State<_FileTile> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.image, size: 40, color: Colors.grey),
+          Icon(
+            _iconForContentType(widget.file.contentType),
+            size: 40,
+            color: Colors.grey,
+          ),
           const SizedBox(height: 4),
-          Text(
-            widget.file.filename,
-            style: const TextStyle(fontSize: 10),
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              widget.file.filename,
+              style: const TextStyle(fontSize: 10),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),
     );
+  }
+
+  IconData _iconForContentType(String contentType) {
+    if (contentType.startsWith('image/')) return Icons.image;
+    if (contentType.startsWith('video/')) return Icons.videocam;
+    if (contentType.startsWith('audio/')) return Icons.audiotrack;
+    if (contentType.contains('pdf')) return Icons.picture_as_pdf;
+    if (contentType.contains('zip') || contentType.contains('archive')) {
+      return Icons.archive;
+    }
+    return Icons.insert_drive_file;
   }
 }

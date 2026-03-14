@@ -22,7 +22,7 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _pickFiles() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
-      type: FileType.image,
+      type: FileType.any,
       withData: kIsWeb,
     );
 
@@ -108,8 +108,8 @@ class _UploadScreenState extends State<UploadScreen> {
           children: [
             FilledButton.icon(
               onPressed: _uploading ? null : _pickFiles,
-              icon: const Icon(Icons.photo_library),
-              label: const Text('Select Photos'),
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Select Files'),
             ),
             const SizedBox(height: 8),
             Text('${_selectedFiles.length} file(s) selected'),
@@ -133,7 +133,7 @@ class _UploadScreenState extends State<UploadScreen> {
                           ? Icons.check_circle
                           : progress?.error == true
                               ? Icons.error
-                              : Icons.image,
+                              : Icons.insert_drive_file,
                       color: progress?.done == true
                           ? Colors.green
                           : progress?.error == true

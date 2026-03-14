@@ -38,7 +38,7 @@ class ApiService {
       onSendProgress: onProgress,
     );
 
-    return response.data['photo_key'] as String;
+    return response.data['key'] as String;
   }
 
   /// List all files in the archive.
