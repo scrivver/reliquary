@@ -13,10 +13,11 @@
 	config.allowUnfree = true;
 	};
 	minioInfra = import ./infra/minio.nix { inherit pkgs; };
+	caddyInfra = import ./infra/caddy.nix { inherit pkgs; };
 	yamlFormat = pkgs.formats.yaml {};
 	processComposeConfig = yamlFormat.generate "process-compose.yaml" {
 	  version = "0.5";
-	  processes = minioInfra.processes;
+	  processes = minioInfra.processes // caddyInfra.processes;
 	};
 	infraShell = import ./shells/infra.nix { inherit pkgs processComposeConfig; };
 	backendShell  = import ./shells/backend.nix { inherit pkgs infraShell; };
