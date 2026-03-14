@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -z "${DATA_DIR:-}" ]; then
+  echo "ERROR: DATA_DIR is not set. Are you in the dev shell? (nix develop)" >&2
+  exit 1
+fi
+
+source load-infra-env
+
+export LISTEN_ADDR="$DATA_DIR/backend.sock"
+
+cd "$PWD/backend" 2>/dev/null || cd "$(dirname "$0")/../backend"
+
+exec air

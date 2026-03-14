@@ -14,8 +14,20 @@ Reliquary preserves what the world discards.
 ### Prerequisites
 
 - [Nix](https://nixos.org/) with flakes enabled
+- [tmux](https://github.com/tmux/tmux) (optional, for the `dev` launcher script)
 
-### Getting Started
+### Quick Start
+
+The fastest way to start all services (requires tmux):
+
+```bash
+nix develop
+dev
+```
+
+This launches infra, backend (with hot reload), and frontend in separate tmux windows. Use `Ctrl-b` + window number to switch between them.
+
+### Manual Start
 
 Enter the development shell:
 
@@ -64,9 +76,15 @@ The Caddy reverse proxy runs on `http://localhost:2080` and routes:
 The backend is a Go API server located in `backend/`. It provides JWT authentication, multipart file upload to MinIO, thumbnail generation, file listing, and deletion.
 
 ```bash
+start-backend            # loads env, runs air (hot reload) on unix socket
+```
+
+Or manually:
+
+```bash
 cd backend
-source load-infra-env    # if not already done
-LISTEN_ADDR=$DATA_DIR/backend.sock go run .
+source load-infra-env
+LISTEN_ADDR=$DATA_DIR/backend.sock air    # or: go run .
 ```
 
 The server listens on a unix socket by default for use with the Caddy proxy. For direct TCP access, use `PORT=8080 go run .` instead.
@@ -78,7 +96,7 @@ The server listens on a unix socket by default for use with the Caddy proxy. For
 | POST | `/api/login` | No | Returns JWT token |
 | GET | `/api/health` | No | Health check |
 | POST | `/api/upload` | Yes | Multipart file upload (field: `file`) |
-| GET | `/api/files` | Yes | List all archived photos |
+| GET | `/api/files?offset=0&limit=50` | Yes | List archived files (paginated) |
 | GET | `/api/files/presign?key=...` | Yes | Presigned download URL |
 | DELETE | `/api/files?key=...` | Yes | Delete file and thumbnail |
 
@@ -87,6 +105,12 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 ### Frontend
 
 The frontend is a Flutter application located in `frontend/`. It targets web, Android, and iOS.
+
+```bash
+start-frontend           # runs flutter web server on port 3000
+```
+
+Or manually:
 
 ```bash
 cd frontend

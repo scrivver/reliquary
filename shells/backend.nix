@@ -7,5 +7,6 @@ pkgs.mkShell {
     pkgs.go
     pkgs.gopls
     pkgs.gotools
+    pkgs.air
   ];
 }
