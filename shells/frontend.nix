@@ -5,5 +5,6 @@ pkgs.mkShell {
   inputsFrom = [ infraShell ];
   buildInputs = [
     pkgs.flutter
+    pkgs.zenity
   ];
 }
