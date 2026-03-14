@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../main.dart';
 import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -17,15 +18,35 @@ class GalleryScreen extends StatefulWidget {
 
 class _GalleryScreenState extends State<GalleryScreen> {
   late final ApiService _apiService;
-  List<FileItem> _files = [];
+  final List<FileItem> _files = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  int _totalCount = 0;
   String? _error;
+
+  static const _pageSize = 50;
 
   @override
   void initState() {
     super.initState();
-    _apiService = ApiService(widget.authService);
+    _apiService = ApiService(
+      widget.authService,
+      onUnauthorized: _handleUnauthorized,
+    );
     _loadFiles();
+  }
+
+  void _handleUnauthorized() {
+    final nav = navigatorKey.currentState;
+    if (nav != null) {
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => LoginScreen(authService: widget.authService),
+        ),
+        (_) => false,
+      );
+    }
   }
 
   Future<void> _loadFiles() async {
@@ -35,10 +56,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
     });
 
     try {
-      final files = await _apiService.listFiles();
+      final result = await _apiService.listFiles(offset: 0, limit: _pageSize);
       if (!mounted) return;
       setState(() {
-        _files = files;
+        _files
+          ..clear()
+          ..addAll(result.files);
+        _totalCount = result.totalCount;
+        _hasMore = result.hasMore;
         _loading = false;
       });
     } catch (e) {
@@ -47,6 +72,29 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _error = 'Failed to load files';
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) return;
+
+    setState(() => _loadingMore = true);
+
+    try {
+      final result = await _apiService.listFiles(
+        offset: _files.length,
+        limit: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _files.addAll(result.files);
+        _totalCount = result.totalCount;
+        _hasMore = result.hasMore;
+        _loadingMore = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
     }
   }
 
@@ -86,7 +134,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (file.isImage) {
       _viewFullImage(file);
     } else {
-      // For non-image files, show a detail dialog with download option.
       _showFileDetails(file);
     }
   }
@@ -152,7 +199,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reliquary'),
+        title: Text(_totalCount > 0
+            ? 'Reliquary ($_totalCount files)'
+            : 'Reliquary'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -200,23 +249,35 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     return RefreshIndicator(
       onRefresh: _loadFiles,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(8),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: _files.length,
-        itemBuilder: (context, index) {
-          final file = _files[index];
-          return _FileTile(
-            file: file,
-            apiService: _apiService,
-            onTap: () => _openFile(file),
-            onDelete: () => _deleteFile(file),
-          );
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is ScrollEndNotification &&
+              notification.metrics.extentAfter < 200) {
+            _loadMore();
+          }
+          return false;
         },
+        child: GridView.builder(
+          padding: const EdgeInsets.all(8),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 200,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: _files.length + (_hasMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= _files.length) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final file = _files[index];
+            return _FileTile(
+              file: file,
+              apiService: _apiService,
+              onTap: () => _openFile(file),
+              onDelete: () => _deleteFile(file),
+            );
+          },
+        ),
       ),
     );
   }
