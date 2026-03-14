@@ -7,6 +7,7 @@ type: project
 Phase 1 MVP technical decisions confirmed 2026-03-15:
 
 - **Router**: Using `chi` for Go backend routing and middleware
+- **General file storage**: Not image-only; supports all file formats. Thumbnails generated only for images. MinIO path is `user/files/YYYY/MM/` (not `photos`)
 - **Folder structure**: Use upload date (not EXIF) for YYYY/MM paths
 - **Auth**: Hardcoded single-user credentials for MVP. Future: admin frontend for user management
 - **Primary targets**: Web, Android, iOS (iOS testing deferred). Desktop (Windows, Linux, macOS) to be confirmed later
