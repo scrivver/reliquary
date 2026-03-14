@@ -6,6 +6,11 @@ if [ -z "${DATA_DIR:-}" ]; then
   exit 1
 fi
 
-cd "$PWD/frontend" 2>/dev/null || cd "$(dirname "$0")/../frontend"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-exec flutter run -d web-server --web-port=3000
+tmux new-window -n frontend 2>/dev/null \
+  || tmux new-session -d -s frontend -n frontend
+
+tmux send-keys -t frontend "cd $PROJECT_ROOT/frontend && flutter run -d web-server --web-port=3000" Enter
+
+echo "Frontend started in tmux window 'frontend'"

@@ -10,6 +10,11 @@ source load-infra-env
 
 export LISTEN_ADDR="$DATA_DIR/backend.sock"
 
-cd "$PWD/backend" 2>/dev/null || cd "$(dirname "$0")/../backend"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-exec air
+tmux new-window -n backend 2>/dev/null \
+  || tmux new-session -d -s backend -n backend
+
+tmux send-keys -t backend "cd $PROJECT_ROOT/backend && LISTEN_ADDR=$DATA_DIR/backend.sock MINIO_PORT=$MINIO_PORT air" Enter
+
+echo "Backend started in tmux window 'backend'"

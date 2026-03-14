@@ -11,9 +11,9 @@ SESSION="reliquary"
 # Kill existing session if any.
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 
-# Start infra first and wait for ports.
-start-infra &
-INFRA_PID=$!
+# Create tmux session with infra in the first window.
+tmux new-session -d -s "$SESSION" -n infra
+tmux send-keys -t "$SESSION:infra" "start-infra" Enter
 
 echo "Waiting for infra to be ready..."
 for i in $(seq 1 30); do
@@ -28,18 +28,14 @@ if [ ! -f "$MINIO_PORT_FILE" ]; then
   exit 1
 fi
 
-# Create tmux session with infra in the first window.
-tmux new-session -d -s "$SESSION" -n infra
-tmux send-keys -t "$SESSION:infra" "echo 'Infra running (PID $INFRA_PID). Use shutdown-infra to stop.'" Enter
+source load-infra-env
 
 # Backend window.
-tmux new-window -t "$SESSION" -n backend
-tmux send-keys -t "$SESSION:backend" "start-backend" Enter
+start-backend
 
 # Frontend window.
-tmux new-window -t "$SESSION" -n frontend
-tmux send-keys -t "$SESSION:frontend" "start-frontend" Enter
+start-frontend
 
 # Select backend window and attach.
-tmux select-window -t "$SESSION:backend"
+tmux select-window -t "$SESSION:backend" 2>/dev/null || true
 exec tmux attach-session -t "$SESSION"
