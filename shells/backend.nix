@@ -8,5 +8,6 @@ pkgs.mkShell {
     pkgs.gopls
     pkgs.gotools
     pkgs.air
+    pkgs.ffmpeg
   ];
 }

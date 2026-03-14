@@ -72,9 +72,10 @@ func (c *Client) GetObject(ctx context.Context, key string) (io.ReadCloser, erro
 	return obj, nil
 }
 
-func (c *Client) PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string) error {
+func (c *Client) PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string, userMeta map[string]string) error {
 	_, err := c.mc.PutObject(ctx, c.bucket, key, reader, size, minio.PutObjectOptions{
-		ContentType: contentType,
+		ContentType:  contentType,
+		UserMetadata: userMeta,
 	})
 	return err
 }

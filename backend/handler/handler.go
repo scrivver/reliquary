@@ -1,9 +1,13 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -40,6 +44,9 @@ type FileItem struct {
 	ContentType  string    `json:"content_type"`
 	LastModified time.Time `json:"last_modified"`
 	ThumbnailKey string    `json:"thumbnail_key,omitempty"`
+	Checksum     string    `json:"checksum,omitempty"`
+	UploadDate   string    `json:"upload_date,omitempty"`
+	OriginalName string    `json:"original_name,omitempty"`
 }
 
 type FileListResponse struct {
@@ -92,18 +99,34 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		fileKey = fmt.Sprintf("user/files/%d/%02d/%s_%d%s", now.Year(), now.Month(), baseName, i, ext)
 	}
 
-	if err := h.store.PutObject(r.Context(), fileKey, file, header.Size, contentType); err != nil {
+	// Read file into memory to compute checksum before uploading.
+	data, err := io.ReadAll(file)
+	if err != nil {
+		httpError(w, "failed to read file", http.StatusInternalServerError)
+		return
+	}
+
+	hash := sha256.Sum256(data)
+	checksum := hex.EncodeToString(hash[:])
+
+	meta := map[string]string{
+		"Checksum":     checksum,
+		"Upload-Date":  now.UTC().Format(time.RFC3339),
+		"Original-Name": header.Filename,
+	}
+
+	if err := h.store.PutObject(r.Context(), fileKey, bytes.NewReader(data), int64(len(data)), contentType, meta); err != nil {
 		slog.Error("upload to minio failed", "key", fileKey, "error", err)
 		httpError(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Info("file uploaded", "key", fileKey, "size", header.Size)
+	slog.Info("file uploaded", "key", fileKey, "size", len(data), "checksum", checksum)
 
-	// Generate thumbnail in the background (images only).
-	if isImageContentType(contentType) {
+	// Generate thumbnail in the background (images and videos).
+	if isImageContentType(contentType) || isVideoContentType(contentType) {
 		go func() {
-			if err := h.thumbs.GenerateThumbnail(context.Background(), fileKey); err != nil {
+			if err := h.thumbs.GenerateThumbnail(context.Background(), fileKey, contentType); err != nil {
 				slog.Error("thumbnail generation failed", "key", fileKey, "error", err)
 			}
 		}()
@@ -159,9 +182,21 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 			ContentType:  ct,
 			LastModified: obj.LastModified,
 		}
-		if isImageContentType(ct) {
+		if isImageContentType(ct) || isVideoContentType(ct) {
 			item.ThumbnailKey = strings.Replace(obj.Key, "/files/", "/thumbs/", 1)
 		}
+
+		// Fetch user metadata (checksum, upload date, original name).
+		if stat, err := h.store.StatObject(r.Context(), obj.Key); err == nil {
+			item.Checksum = stat.UserMetadata["Checksum"]
+			item.UploadDate = stat.UserMetadata["Upload-Date"]
+			item.OriginalName = stat.UserMetadata["Original-Name"]
+			// Use stat's content type if available (more reliable).
+			if stat.ContentType != "" {
+				item.ContentType = stat.ContentType
+			}
+		}
+
 		files = append(files, item)
 	}
 
@@ -241,4 +276,8 @@ func httpError(w http.ResponseWriter, msg string, code int) {
 
 func isImageContentType(ct string) bool {
 	return strings.HasPrefix(ct, "image/")
+}
+
+func isVideoContentType(ct string) bool {
+	return strings.HasPrefix(ct, "video/")
 }
