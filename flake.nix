@@ -45,6 +45,9 @@
 	# Generate process-compose config
 	cp -f ${processComposeConfig} "$DATA_DIR/process-compose.yaml"
 
+	# Process-compose unix socket path
+	export PC_SOCKET="$DATA_DIR/process-compose.sock"
+
 	# Export port file paths so other services can read the dynamic ports
 	export MINIO_PORT_FILE="$DATA_DIR/minio/port"
 	export MINIO_CONSOLE_PORT_FILE="$DATA_DIR/minio/console_port"

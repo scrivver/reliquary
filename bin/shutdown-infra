@@ -6,4 +6,4 @@ if [ -z "${DATA_DIR:-}" ]; then
   exit 1
 fi
 
-exec process-compose up -f "$DATA_DIR/process-compose.yaml" -u "$PC_SOCKET"
+exec process-compose down -u "$PC_SOCKET"
