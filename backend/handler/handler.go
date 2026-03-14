@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,7 +43,10 @@ type FileItem struct {
 }
 
 type FileListResponse struct {
-	Files []FileItem `json:"files"`
+	Files      []FileItem `json:"files"`
+	TotalCount int        `json:"total_count"`
+	Offset     int        `json:"offset"`
+	Limit      int        `json:"limit"`
 }
 
 type PresignDownloadResponse struct {
@@ -75,7 +79,18 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
+	baseName := strings.TrimSuffix(filename, path.Ext(filename))
+	ext := path.Ext(filename)
 	fileKey := fmt.Sprintf("user/files/%d/%02d/%s", now.Year(), now.Month(), filename)
+
+	// Avoid overwriting existing files by appending a suffix.
+	for i := 1; ; i++ {
+		_, err := h.store.StatObject(r.Context(), fileKey)
+		if err != nil {
+			break // Object doesn't exist, safe to use this key.
+		}
+		fileKey = fmt.Sprintf("user/files/%d/%02d/%s_%d%s", now.Year(), now.Month(), baseName, i, ext)
+	}
 
 	if err := h.store.PutObject(r.Context(), fileKey, file, header.Size, contentType); err != nil {
 		slog.Error("upload to minio failed", "key", fileKey, "error", err)
@@ -97,14 +112,36 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, UploadResponse{Key: fileKey, Size: header.Size})
 }
 
-// ListFiles returns all files with their content types and thumbnail keys (for images).
-// GET /api/files
+// ListFiles returns files with pagination support.
+// GET /api/files?offset=0&limit=50
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	objects, err := h.store.ListObjects(r.Context(), "user/files/")
 	if err != nil {
 		slog.Error("list objects failed", "error", err)
 		httpError(w, "failed to list files", http.StatusInternalServerError)
 		return
+	}
+
+	totalCount := len(objects)
+
+	// Apply pagination.
+	end := offset + limit
+	if offset > len(objects) {
+		objects = nil
+	} else {
+		if end > len(objects) {
+			end = len(objects)
+		}
+		objects = objects[offset:end]
 	}
 
 	files := make([]FileItem, 0, len(objects))
@@ -128,7 +165,12 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		files = append(files, item)
 	}
 
-	jsonResponse(w, FileListResponse{Files: files})
+	jsonResponse(w, FileListResponse{
+		Files:      files,
+		TotalCount: totalCount,
+		Offset:     offset,
+		Limit:      limit,
+	})
 }
 
 // PresignDownload generates a presigned GET URL routed through the reverse proxy.
