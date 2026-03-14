@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Source this script to load infra env vars into your shell:
+#   source load-infra-env
+
+if [ -z "${DATA_DIR:-}" ]; then
+  echo "ERROR: DATA_DIR is not set. Are you in the dev shell? (nix develop)" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if [ ! -f "$MINIO_PORT_FILE" ] || [ ! -f "$MINIO_CONSOLE_PORT_FILE" ]; then
+  echo "ERROR: Port files not found. Is infra running? (start-infra)" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+export MINIO_PORT=$(cat "$MINIO_PORT_FILE")
+export MINIO_CONSOLE_PORT=$(cat "$MINIO_CONSOLE_PORT_FILE")
+
+echo "MINIO_PORT=$MINIO_PORT"
+echo "MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT"
