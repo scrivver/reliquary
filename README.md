@@ -35,25 +35,29 @@ nix develop .#infra      # Infra tooling only
 
 ### Infrastructure
 
-Start the infrastructure services (MinIO):
+Start the infrastructure services (MinIO + Caddy reverse proxy):
 
 ```bash
 start-infra
 ```
 
-In a separate terminal (inside the dev shell), load the MinIO ports into your environment:
+In a separate terminal (inside the dev shell), load the ports into your environment:
 
 ```bash
 source load-infra-env
 ```
 
-This exports `MINIO_PORT` and `MINIO_CONSOLE_PORT` for use by other services.
+This exports `MINIO_PORT`, `MINIO_CONSOLE_PORT`, and `PROXY_PORT` for use by other services.
 
 Stop all infrastructure services:
 
 ```bash
 shutdown-infra
 ```
+
+The Caddy reverse proxy runs on `http://localhost:2080` and routes:
+- `/api/*` → Go backend (unix socket)
+- `/storage/*` → MinIO (for presigned file downloads)
 
 ### Backend
 
@@ -62,10 +66,10 @@ The backend is a Go API server located in `backend/`. It provides JWT authentica
 ```bash
 cd backend
 source load-infra-env    # if not already done
-go run .
+LISTEN_ADDR=$DATA_DIR/backend.sock go run .
 ```
 
-The server starts on port `8080` by default (override with `PORT` env var).
+The server listens on a unix socket by default for use with the Caddy proxy. For direct TCP access, use `PORT=8080 go run .` instead.
 
 #### API Endpoints
 
