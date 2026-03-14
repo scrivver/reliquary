@@ -5,6 +5,7 @@ import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
+import 'settings_screen.dart';
 import 'upload_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -165,14 +166,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(file.filename),
+        title: Text(file.originalName ?? file.filename),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Type: ${file.contentType}'),
             Text('Size: ${_formatSize(file.size)}'),
-            Text('Uploaded: ${file.lastModified.toLocal()}'),
+            if (file.uploadDate != null)
+              Text('Uploaded: ${file.uploadDate}'),
+            if (file.checksum != null)
+              Text('SHA-256: ${file.checksum!.substring(0, 16)}...'),
+            if (file.originalName != null && file.originalName != file.filename)
+              Text('Stored as: ${file.filename}'),
           ],
         ),
         actions: [
@@ -203,6 +209,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
             ? 'Reliquary ($_totalCount files)'
             : 'Reliquary'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+            tooltip: 'Settings',
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,

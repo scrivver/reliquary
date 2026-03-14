@@ -9,6 +9,10 @@ class ApiService {
   final void Function()? onUnauthorized;
   late final Dio _dio;
 
+  // Cache presigned URLs for 10 minutes (they're valid for 15).
+  final Map<String, _CachedUrl> _urlCache = {};
+  static const _cacheTtl = Duration(minutes: 10);
+
   ApiService(this._authService, {this.onUnauthorized}) {
     _dio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl));
     _dio.interceptors.add(InterceptorsWrapper(
@@ -71,10 +75,19 @@ class ApiService {
   }
 
   /// Get a presigned download URL for a file or thumbnail.
+  /// Results are cached for 10 minutes to avoid redundant API calls.
   Future<String> presignDownload(String key) async {
+    final cached = _urlCache[key];
+    if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+      return cached.url;
+    }
+
     final response =
         await _dio.get('/api/files/presign', queryParameters: {'key': key});
-    return response.data['url'] as String;
+    final url = response.data['url'] as String;
+
+    _urlCache[key] = _CachedUrl(url: url, expiresAt: DateTime.now().add(_cacheTtl));
+    return url;
   }
 
   /// Delete a file from the archive.
@@ -97,4 +110,11 @@ class FileListResult {
   });
 
   bool get hasMore => offset + files.length < totalCount;
+}
+
+class _CachedUrl {
+  final String url;
+  final DateTime expiresAt;
+
+  _CachedUrl({required this.url, required this.expiresAt});
 }

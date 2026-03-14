@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'config.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.load();
   runApp(const MyApp());
 }
 
