@@ -23,7 +23,15 @@ Enter the development shell:
 nix develop
 ```
 
-This sets up all dependencies and generates the process-compose configuration.
+This sets up all dependencies (Go, Flutter, MinIO, process-compose) and generates the process-compose configuration.
+
+You can also enter a focused shell for a specific layer:
+
+```bash
+nix develop .#backend    # Go + infra tooling
+nix develop .#frontend   # Flutter + infra tooling
+nix develop .#infra      # Infra tooling only
+```
 
 ### Infrastructure
 
@@ -46,3 +54,11 @@ Stop all infrastructure services:
 ```bash
 shutdown-infra
 ```
+
+### Backend
+
+The backend is a Go service located in `backend/`.
+
+### Frontend
+
+The frontend is a Flutter application located in `frontend/`.
