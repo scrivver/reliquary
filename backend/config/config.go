@@ -8,7 +8,10 @@ import (
 
 type Config struct {
 	// Server
-	Port string
+	ListenAddr string // "host:port" or unix socket path
+
+	// Proxy
+	ProxyBaseURL string // e.g. "http://localhost:2080"
 
 	// MinIO
 	MinIOEndpoint  string
@@ -29,8 +32,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("MINIO_PORT is not set; run: source load-infra-env")
 	}
 
+	listenAddr := envOr("LISTEN_ADDR", ":"+envOr("PORT", "8080"))
+
 	cfg := &Config{
-		Port:           envOr("PORT", "8080"),
+		ListenAddr:     listenAddr,
+		ProxyBaseURL:   envOr("PROXY_BASE_URL", "http://localhost:2080"),
 		MinIOEndpoint:  envOr("MINIO_ENDPOINT", "127.0.0.1:"+minioPort),
 		MinIOAccessKey: envOr("MINIO_ACCESS_KEY", "minioadmin"),
 		MinIOSecretKey: envOr("MINIO_SECRET_KEY", "minioadmin"),

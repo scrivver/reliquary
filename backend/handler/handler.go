@@ -10,17 +10,19 @@ import (
 	"strings"
 	"time"
 
+	"reliquary-be/config"
 	"reliquary-be/storage"
 	"reliquary-be/worker"
 )
 
 type Handler struct {
-	store  *storage.Client
-	thumbs *worker.ThumbnailWorker
+	store        *storage.Client
+	thumbs       *worker.ThumbnailWorker
+	proxyBaseURL string
 }
 
-func New(store *storage.Client, thumbs *worker.ThumbnailWorker) *Handler {
-	return &Handler{store: store, thumbs: thumbs}
+func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker) *Handler {
+	return &Handler{store: store, thumbs: thumbs, proxyBaseURL: cfg.ProxyBaseURL}
 }
 
 // --- Request / Response types ---
@@ -115,7 +117,7 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, FileListResponse{Files: files})
 }
 
-// PresignDownload generates a presigned GET URL for a file.
+// PresignDownload generates a presigned GET URL routed through the reverse proxy.
 // GET /api/files/presign?key=...
 func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
@@ -124,14 +126,20 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	url, err := h.store.PresignGet(r.Context(), key)
+	presignedURL, err := h.store.PresignGet(r.Context(), key)
 	if err != nil {
 		slog.Error("presign get failed", "key", key, "error", err)
 		httpError(w, "failed to generate download URL", http.StatusInternalServerError)
 		return
 	}
 
-	jsonResponse(w, PresignDownloadResponse{URL: url.String()})
+	// Rewrite the MinIO URL to go through the reverse proxy at /storage/.
+	proxyURL := h.proxyBaseURL + "/storage" + presignedURL.Path
+	if presignedURL.RawQuery != "" {
+		proxyURL += "?" + presignedURL.RawQuery
+	}
+
+	jsonResponse(w, PresignDownloadResponse{URL: proxyURL})
 }
 
 // DeleteFile removes a file and its thumbnail from MinIO.

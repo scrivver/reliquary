@@ -2,12 +2,13 @@ package main
 
 import (
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 
 	"reliquary-be/auth"
 	"reliquary-be/config"
@@ -35,19 +36,11 @@ func main() {
 
 	authSvc := auth.NewService(cfg)
 	thumbs := worker.NewThumbnailWorker(store)
-	h := handler.New(store, thumbs)
+	h := handler.New(cfg, store, thumbs)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
 
 	// Public
 	r.Post("/api/login", authSvc.LoginHandler)
@@ -67,8 +60,27 @@ func main() {
 		r.Delete("/api/files", h.DeleteFile)
 	})
 
-	slog.Info("starting server", "port", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
+	var ln net.Listener
+	if strings.HasSuffix(cfg.ListenAddr, ".sock") || strings.HasPrefix(cfg.ListenAddr, "/") {
+		// Unix socket mode
+		os.Remove(cfg.ListenAddr) // clean up stale socket
+		ln, err = net.Listen("unix", cfg.ListenAddr)
+		if err != nil {
+			slog.Error("failed to listen on unix socket", "path", cfg.ListenAddr, "error", err)
+			os.Exit(1)
+		}
+		slog.Info("listening on unix socket", "path", cfg.ListenAddr)
+	} else {
+		// TCP mode
+		ln, err = net.Listen("tcp", cfg.ListenAddr)
+		if err != nil {
+			slog.Error("failed to listen on TCP", "addr", cfg.ListenAddr, "error", err)
+			os.Exit(1)
+		}
+		slog.Info("listening on TCP", "addr", cfg.ListenAddr)
+	}
+
+	if err := http.Serve(ln, r); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)
 	}
