@@ -34,11 +34,49 @@ shutdown-infra           # Stop all services
 
 - **`flake.nix`** — Dev shell definitions. Imports shell modules from `shells/` and generates the process-compose config at nix eval time using `pkgs.formats.yaml`.
 - **`shells/`** — Nix shell definitions. `infra.nix` is the base shell; `backend.nix` and `frontend.nix` extend it via `inputsFrom`.
-- **`backend/`** — Go backend service.
-- **`frontend/`** — Flutter frontend application.
+- **`backend/`** — Go API server (chi router, JWT auth, multipart upload, thumbnail generation).
+  - `config/` — Environment-based configuration (MinIO endpoint, auth credentials, JWT secret).
+  - `auth/` — JWT login handler and auth middleware.
+  - `handler/` — HTTP handlers for upload, file listing, presigned download, and deletion.
+  - `storage/` — MinIO client wrapper (put, get, list, delete, presign, stat).
+  - `worker/` — Thumbnail generation (300px width, JPEG quality 80, uses `x/image`).
+- **`frontend/`** — Flutter application (web, Android, iOS targets).
+  - `lib/config.dart` — API base URL configuration.
+  - `lib/models/` — Data models (FileItem).
+  - `lib/services/` — Auth service (JWT + shared_preferences) and API service (Dio + multipart upload).
+  - `lib/screens/` — Login, gallery (thumbnail grid + full-res viewer), and upload (multi-file with progress).
 - **`infra/minio.nix`** — Defines MinIO process-compose processes as a Nix attrset. Uses ephemeral ports (allocated via Python at runtime) and writes them to `$DATA_DIR/minio/port` and `$DATA_DIR/minio/console_port`. Includes a `minio-create-bucket` process that depends on MinIO being healthy.
 - **`bin/`** — Shell scripts injected into PATH by the dev shell. All require `DATA_DIR` to be set.
 - **`.data/`** — Runtime directory (gitignored). Holds generated configs, MinIO data, port files, and the process-compose unix socket.
+
+## Backend API
+
+All endpoints except `/api/login` and `/api/health` require a `Bearer` JWT token in the `Authorization` header.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/login` | Authenticate with username/password, returns JWT |
+| GET | `/api/health` | Health check |
+| POST | `/api/upload` | Multipart file upload (field: `file`), stores in MinIO and triggers thumbnail generation |
+| GET | `/api/files` | List all photos with thumbnail keys |
+| GET | `/api/files/presign?key=...` | Get presigned download URL for a file or thumbnail |
+| DELETE | `/api/files?key=...` | Delete a file and its thumbnail |
+
+## Running Locally
+
+```bash
+# 1. Start infra and load ports
+start-infra
+source load-infra-env
+
+# 2. Run backend (in backend/)
+go run .
+
+# 3. Run frontend (in frontend/)
+flutter run -d web-server    # or: flutter run -d linux
+```
+
+Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` and `AUTH_PASSWORD` env vars).
 
 ## Key Design Decisions
 

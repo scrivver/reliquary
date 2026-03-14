@@ -57,8 +57,42 @@ shutdown-infra
 
 ### Backend
 
-The backend is a Go service located in `backend/`.
+The backend is a Go API server located in `backend/`. It provides JWT authentication, multipart file upload to MinIO, thumbnail generation, file listing, and deletion.
+
+```bash
+cd backend
+source load-infra-env    # if not already done
+go run .
+```
+
+The server starts on port `8080` by default (override with `PORT` env var).
+
+#### API Endpoints
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/login` | No | Returns JWT token |
+| GET | `/api/health` | No | Health check |
+| POST | `/api/upload` | Yes | Multipart file upload (field: `file`) |
+| GET | `/api/files` | Yes | List all archived photos |
+| GET | `/api/files/presign?key=...` | Yes | Presigned download URL |
+| DELETE | `/api/files?key=...` | Yes | Delete file and thumbnail |
+
+Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_PASSWORD` env vars).
 
 ### Frontend
 
-The frontend is a Flutter application located in `frontend/`.
+The frontend is a Flutter application located in `frontend/`. It targets web, Android, and iOS.
+
+```bash
+cd frontend
+flutter run -d web-server    # Web (open in any browser)
+flutter run -d linux         # Linux desktop
+flutter run -d chrome        # Chrome (set CHROME_EXECUTABLE for Firefox)
+```
+
+Features:
+- Login with JWT authentication
+- Multi-file photo upload with progress tracking
+- Thumbnail gallery with tap-to-view full resolution
+- File deletion with confirmation
