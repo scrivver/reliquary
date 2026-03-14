@@ -18,45 +18,20 @@
 	  version = "0.5";
 	  processes = minioInfra.processes;
 	};
+	infraShell = import ./shells/infra.nix { inherit pkgs processComposeConfig; };
+	backendShell  = import ./shells/backend.nix { inherit pkgs infraShell; };
+	frontendShell = import ./shells/frontend.nix { inherit pkgs infraShell; };
 	in
 	{
 	devShells = rec {
-
-	dev = pkgs.mkShell {
-	name = "reliquary-dev-shell";
-	buildInputs = [
-	pkgs.minio
-	pkgs.process-compose
-	pkgs.python3
-	pkgs.curl
-	];
-
-	shellHook = ''
-
-	export SHELL=${pkgs.bash}/bin/bash
-	export PATH="$PWD/bin:$PATH"
-
-	export DATA_DIR="$PWD/.data"
-	mkdir -p "$DATA_DIR"
-	mkdir -p "$DATA_DIR/minio"
-
-	export MINIO_PATH="$DATA_DIR/minio"
-
-	# Generate process-compose config
-	cp -f ${processComposeConfig} "$DATA_DIR/process-compose.yaml"
-
-	# Process-compose unix socket path
-	export PC_SOCKET="$DATA_DIR/process-compose.sock"
-
-	# Export port file paths so other services can read the dynamic ports
-	export MINIO_PORT_FILE="$DATA_DIR/minio/port"
-	export MINIO_CONSOLE_PORT_FILE="$DATA_DIR/minio/console_port"
-
-	'';
-
+	infra    = infraShell;
+	backend  = backendShell;
+	frontend = frontendShell;
+	full     = pkgs.mkShell {
+	  name = "reliquary-full-shell";
+	  inputsFrom = [ backendShell frontendShell ];
 	};
-
-	default = dev;
+	default  = full;
 	};
 	}
   );
