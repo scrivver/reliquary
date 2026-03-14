@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -28,15 +29,16 @@ func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWork
 // --- Request / Response types ---
 
 type UploadResponse struct {
-	PhotoKey string `json:"photo_key"`
-	Size     int64  `json:"size"`
+	Key  string `json:"key"`
+	Size int64  `json:"size"`
 }
 
 type FileItem struct {
 	Key          string    `json:"key"`
 	Size         int64     `json:"size"`
+	ContentType  string    `json:"content_type"`
 	LastModified time.Time `json:"last_modified"`
-	ThumbnailKey string    `json:"thumbnail_key"`
+	ThumbnailKey string    `json:"thumbnail_key,omitempty"`
 }
 
 type FileListResponse struct {
@@ -73,30 +75,32 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	photoKey := fmt.Sprintf("user/photos/%d/%02d/%s", now.Year(), now.Month(), filename)
+	fileKey := fmt.Sprintf("user/files/%d/%02d/%s", now.Year(), now.Month(), filename)
 
-	if err := h.store.PutObject(r.Context(), photoKey, file, header.Size, contentType); err != nil {
-		slog.Error("upload to minio failed", "key", photoKey, "error", err)
+	if err := h.store.PutObject(r.Context(), fileKey, file, header.Size, contentType); err != nil {
+		slog.Error("upload to minio failed", "key", fileKey, "error", err)
 		httpError(w, "failed to store file", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Info("file uploaded", "key", photoKey, "size", header.Size)
+	slog.Info("file uploaded", "key", fileKey, "size", header.Size)
 
-	// Generate thumbnail in the background.
-	go func() {
-		if err := h.thumbs.GenerateThumbnail(context.Background(), photoKey); err != nil {
-			slog.Error("thumbnail generation failed", "key", photoKey, "error", err)
-		}
-	}()
+	// Generate thumbnail in the background (images only).
+	if isImageContentType(contentType) {
+		go func() {
+			if err := h.thumbs.GenerateThumbnail(context.Background(), fileKey); err != nil {
+				slog.Error("thumbnail generation failed", "key", fileKey, "error", err)
+			}
+		}()
+	}
 
-	jsonResponse(w, UploadResponse{PhotoKey: photoKey, Size: header.Size})
+	jsonResponse(w, UploadResponse{Key: fileKey, Size: header.Size})
 }
 
-// ListFiles returns all photos with their thumbnail keys.
+// ListFiles returns all files with their content types and thumbnail keys (for images).
 // GET /api/files
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
-	objects, err := h.store.ListObjects(r.Context(), "user/photos/")
+	objects, err := h.store.ListObjects(r.Context(), "user/files/")
 	if err != nil {
 		slog.Error("list objects failed", "error", err)
 		httpError(w, "failed to list files", http.StatusInternalServerError)
@@ -105,13 +109,23 @@ func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	files := make([]FileItem, 0, len(objects))
 	for _, obj := range objects {
-		thumbKey := strings.Replace(obj.Key, "/photos/", "/thumbs/", 1)
-		files = append(files, FileItem{
+		ct := obj.ContentType
+		if ct == "" {
+			ct = mime.TypeByExtension(path.Ext(obj.Key))
+		}
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		item := FileItem{
 			Key:          obj.Key,
 			Size:         obj.Size,
+			ContentType:  ct,
 			LastModified: obj.LastModified,
-			ThumbnailKey: thumbKey,
-		})
+		}
+		if isImageContentType(ct) {
+			item.ThumbnailKey = strings.Replace(obj.Key, "/files/", "/thumbs/", 1)
+		}
+		files = append(files, item)
 	}
 
 	jsonResponse(w, FileListResponse{Files: files})
@@ -157,10 +171,12 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Also delete the thumbnail.
-	thumbKey := strings.Replace(key, "/photos/", "/thumbs/", 1)
-	if err := h.store.DeleteObject(r.Context(), thumbKey); err != nil {
-		slog.Warn("delete thumbnail failed (may not exist)", "key", thumbKey, "error", err)
+	// Also delete the thumbnail if one might exist.
+	thumbKey := strings.Replace(key, "/files/", "/thumbs/", 1)
+	if thumbKey != key {
+		if err := h.store.DeleteObject(r.Context(), thumbKey); err != nil {
+			slog.Warn("delete thumbnail failed (may not exist)", "key", thumbKey, "error", err)
+		}
 	}
 
 	jsonResponse(w, map[string]string{"status": "deleted"})
@@ -179,4 +195,8 @@ func jsonResponse(w http.ResponseWriter, data any) {
 
 func httpError(w http.ResponseWriter, msg string, code int) {
 	http.Error(w, msg, code)
+}
+
+func isImageContentType(ct string) bool {
+	return strings.HasPrefix(ct, "image/")
 }
