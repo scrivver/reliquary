@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -6,6 +7,7 @@ import '../main.dart';
 import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/download_helper.dart' as dl;
 import 'login_screen.dart';
 import 'upload_screen.dart';
 
@@ -31,6 +33,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   int _totalCount = 0;
   String? _error;
   String _username = '';
+  bool _selectMode = false;
+  final Set<String> _selected = {};
 
   static const _pageSize = 50;
 
@@ -151,52 +155,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
   }
 
-  void _showFileMenu(FileItem file) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(file.filename,
-                  style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w600)),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: Text('DETAILS', style: GoogleFonts.spaceGrotesk(
-                  fontSize: 13, letterSpacing: 0.8)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showFileDetails(file);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.download),
-              title: Text('DOWNLOAD', style: GoogleFonts.spaceGrotesk(
-                  fontSize: 13, letterSpacing: 0.8)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _downloadFile(file);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Color(0xFFEC3713)),
-              title: Text('DELETE', style: GoogleFonts.spaceGrotesk(
-                  fontSize: 13, letterSpacing: 0.8, color: const Color(0xFFEC3713))),
-              onTap: () {
-                Navigator.pop(ctx);
-                _deleteFile(file);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _openFile(FileItem file) async {
     if (file.isImage) {
       _viewFullImage(file);
@@ -270,6 +228,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
+              _deleteFile(file);
+            },
+            child: const Text('DELETE',
+                style: TextStyle(color: Color(0xFFEC3713))),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
               _downloadFile(file);
             },
             child: const Text('DOWNLOAD'),
@@ -306,65 +272,226 @@ class _GalleryScreenState extends State<GalleryScreen> {
     _handleUnauthorized();
   }
 
+  void _toggleSelect(FileItem file) {
+    setState(() {
+      if (_selected.contains(file.key)) {
+        _selected.remove(file.key);
+        if (_selected.isEmpty) _selectMode = false;
+      } else {
+        _selected.add(file.key);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selected.addAll(_files.map((f) => f.key));
+    });
+  }
+
+  void _exitSelectMode() {
+    setState(() {
+      _selectMode = false;
+      _selected.clear();
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    final count = _selected.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('DELETE FILES'),
+        content: Text('Permanently remove $count file(s)?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('DELETE',
+                style: TextStyle(color: Color(0xFFEC3713))),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    for (final key in _selected.toList()) {
+      try {
+        await widget.apiService.deleteFile(key);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e')),
+        );
+        break;
+      }
+    }
+    _exitSelectMode();
+    _loadFiles();
+  }
+
+  Future<void> _downloadSelected() async {
+    final keys = _selected.toList();
+
+    if (kIsWeb) {
+      if (keys.length == 1) {
+        // Single file on web — direct download.
+        try {
+          final url = await widget.apiService.presignDownloadForSave(keys.first);
+          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to download: $e')),
+          );
+          return;
+        }
+      } else {
+        // Multiple files on web — zip download.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Preparing ${keys.length} files for download...',
+                  style: GoogleFonts.spaceMono(fontSize: 12))),
+        );
+        try {
+          final zipBytes = await widget.apiService.batchDownload(keys);
+          if (!mounted) return;
+          dl.triggerDownload(
+              Uint8List.fromList(zipBytes), 'reliquary-download.zip');
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to download: $e')),
+          );
+          return;
+        }
+      }
+    } else {
+      // Native — save individual files to a picked directory.
+      try {
+        await dl.triggerDownload(
+          keys,
+          (key) => widget.apiService.presignDownloadForSave(key),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to download: $e')),
+        );
+        return;
+      }
+    }
+
+    _exitSelectMode();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+          content: Text('${keys.length} file(s) downloaded',
+              style: GoogleFonts.spaceMono(fontSize: 12))),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            Text('FILES_ROOT',
+        leading: _selectMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _exitSelectMode,
+              )
+            : null,
+        title: _selectMode
+            ? Text('${_selected.length} SELECTED',
                 style: GoogleFonts.spaceMono(
-                    fontSize: 14, fontWeight: FontWeight.w700)),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEC3713).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
+                    fontSize: 14, fontWeight: FontWeight.w700))
+            : Row(
+                children: [
+                  Text('FILES_ROOT',
+                      style: GoogleFonts.spaceMono(
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEC3713).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _username.toUpperCase(),
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 10,
+                        color: const Color(0xFFEC3713),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: Text(
-                _username.toUpperCase(),
-                style: GoogleFonts.spaceMono(
-                  fontSize: 10,
-                  color: const Color(0xFFEC3713),
-                  fontWeight: FontWeight.w600,
+        actions: _selectMode
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.select_all, size: 20),
+                  onPressed: _selectAll,
+                  tooltip: 'SELECT_ALL',
                 ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          if (_totalCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Center(
-                child: Text(
-                  '$_totalCount ITEMS',
-                  style: GoogleFonts.spaceMono(
-                      fontSize: 10, color: Colors.grey),
+                IconButton(
+                  icon: const Icon(Icons.download, size: 20),
+                  onPressed: _selected.isEmpty ? null : _downloadSelected,
+                  tooltip: 'DOWNLOAD',
                 ),
-              ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.logout, size: 20),
-            onPressed: _logout,
-            tooltip: 'LOGOUT',
-          ),
-        ],
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      size: 20, color: Color(0xFFEC3713)),
+                  onPressed: _selected.isEmpty ? null : _deleteSelected,
+                  tooltip: 'DELETE',
+                ),
+              ]
+            : [
+                if (_totalCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Center(
+                      child: Text(
+                        '$_totalCount ITEMS',
+                        style: GoogleFonts.spaceMono(
+                            fontSize: 10, color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                if (_files.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.checklist, size: 20),
+                    onPressed: () => setState(() => _selectMode = true),
+                    tooltip: 'SELECT',
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.logout, size: 20),
+                  onPressed: _logout,
+                  tooltip: 'LOGOUT',
+                ),
+              ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'upload_fab',
-        backgroundColor: const Color(0xFFEC3713),
-        foregroundColor: Colors.white,
-        onPressed: () async {
-          await Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => UploadScreen(apiService: widget.apiService),
-          ));
-          _loadFiles();
-        },
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _selectMode
+          ? null
+          : FloatingActionButton(
+              heroTag: 'upload_fab',
+              backgroundColor: const Color(0xFFEC3713),
+              foregroundColor: Colors.white,
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => UploadScreen(apiService: widget.apiService),
+                ));
+                _loadFiles();
+              },
+              child: const Icon(Icons.add),
+            ),
     );
   }
 
@@ -426,11 +553,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             final file = _files[index];
+            final isSelected = _selected.contains(file.key);
             return _FileTile(
               file: file,
               apiService: widget.apiService,
-              onTap: () => _openFile(file),
-              onLongPress: () => _showFileMenu(file),
+              selected: _selectMode ? isSelected : null,
+              onTap: _selectMode
+                  ? () => _toggleSelect(file)
+                  : () => _openFile(file),
+              onLongPress: _selectMode
+                  ? null
+                  : () {
+                      setState(() => _selectMode = true);
+                      _toggleSelect(file);
+                    },
             );
           },
         ),
@@ -448,14 +584,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
 class _FileTile extends StatefulWidget {
   final FileItem file;
   final ApiService apiService;
+  final bool? selected; // null = not in select mode
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onLongPress;
 
   const _FileTile({
     required this.file,
     required this.apiService,
+    this.selected,
     required this.onTap,
-    required this.onLongPress,
+    this.onLongPress,
   });
 
   @override
@@ -483,24 +621,60 @@ class _FileTileState extends State<_FileTile> {
 
   @override
   Widget build(BuildContext context) {
+    final isSelected = widget.selected == true;
+    final inSelectMode = widget.selected != null;
+
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            border: Border.all(color: const Color(0xFFE0E0E0)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: _thumbUrl != null
-              ? Image.network(
-                  _thumbUrl!,
-                  fit: BoxFit.cover,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                border: Border.all(
+                  color: isSelected
+                      ? const Color(0xFFEC3713)
+                      : const Color(0xFFE0E0E0),
+                  width: isSelected ? 2 : 1,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: _thumbUrl != null
+                  ? Image.network(
+                      _thumbUrl!,
+                      fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => _placeholder(),
                 )
               : _placeholder(),
+            ),
+            if (inSelectMode)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFFEC3713)
+                        : Colors.white.withValues(alpha: 0.8),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFFEC3713)
+                          : Colors.grey,
+                    ),
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check, size: 16, color: Colors.white)
+                      : null,
+                ),
+              ),
+          ],
         ),
       ),
     );

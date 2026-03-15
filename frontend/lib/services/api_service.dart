@@ -114,6 +114,16 @@ class ApiService {
     await _dio.delete('/api/files', queryParameters: {'key': key});
   }
 
+  /// Download multiple files as a zip archive. Returns the zip bytes.
+  Future<List<int>> batchDownload(List<String> keys) async {
+    final response = await _dio.post(
+      '/api/files/download',
+      data: {'keys': keys},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data as List<int>;
+  }
+
   // --- Archive API ---
 
   /// List archived files with pagination.
