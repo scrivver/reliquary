@@ -142,11 +142,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isImageContentType(contentType) || isVideoContentType(contentType) {
-		go func() {
-			if err := h.thumbs.GenerateThumbnail(context.Background(), fileKey, contentType); err != nil {
-				slog.Error("thumbnail generation failed", "key", fileKey, "error", err)
-			}
-		}()
+		h.thumbs.Submit(fileKey, contentType)
 	}
 
 	jsonResponse(w, UploadResponse{Key: fileKey, Size: header.Size})

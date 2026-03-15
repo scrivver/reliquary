@@ -27,8 +27,11 @@ type Config struct {
 	Username  string
 	Password  string
 
+	// Workers
+	ThumbnailWorkers int
+
 	// Lifecycle
-	ArchiveAfterDays   int
+	ArchiveAfterDays     int
 	ArchiveCheckInterval time.Duration
 }
 
@@ -51,6 +54,8 @@ func Load() (*Config, error) {
 		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
 		Username:       envOr("AUTH_USERNAME", "admin"),
 		Password:       envOr("AUTH_PASSWORD", "admin"),
+
+		ThumbnailWorkers:     envOrInt("THUMBNAIL_WORKERS", 4),
 
 		ArchiveAfterDays:     envOrInt("ARCHIVE_AFTER_DAYS", 90),
 		ArchiveCheckInterval: time.Duration(envOrInt("ARCHIVE_CHECK_HOURS", 24)) * time.Hour,

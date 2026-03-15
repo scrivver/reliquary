@@ -54,7 +54,9 @@ func main() {
 	checksums := storage.NewChecksumIndex(store)
 
 	authSvc := auth.NewService(cfg, users)
-	thumbs := worker.NewThumbnailWorker(store)
+	thumbs := worker.NewThumbnailWorker(store, cfg.ThumbnailWorkers)
+	thumbs.Start(context.Background(), cfg.ThumbnailWorkers)
+
 	archival := worker.NewArchivalWorker(cfg, store, checksums, users)
 	h := handler.New(cfg, store, thumbs, checksums, archival)
 	adminH := handler.NewAdminHandler(users, store)

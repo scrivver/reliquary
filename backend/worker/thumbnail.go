@@ -21,20 +21,61 @@ import (
 const (
 	thumbWidth   = 300
 	thumbQuality = 80
+	jobQueueSize = 100
 )
+
+type thumbnailJob struct {
+	fileKey     string
+	contentType string
+}
 
 type ThumbnailWorker struct {
 	store *storage.Client
+	jobs  chan thumbnailJob
 }
 
-func NewThumbnailWorker(store *storage.Client) *ThumbnailWorker {
-	return &ThumbnailWorker{store: store}
+func NewThumbnailWorker(store *storage.Client, numWorkers int) *ThumbnailWorker {
+	return &ThumbnailWorker{
+		store: store,
+		jobs:  make(chan thumbnailJob, jobQueueSize),
+	}
 }
 
-// GenerateThumbnail creates a thumbnail for the given file.
-// For images, it resizes directly. For videos, it extracts the first frame
-// using ffmpeg. Unsupported types are skipped.
+// Start launches the worker goroutines. Call this once on startup.
+func (w *ThumbnailWorker) Start(ctx context.Context, numWorkers int) {
+	slog.Info("thumbnail worker pool started", "workers", numWorkers, "queue_size", jobQueueSize)
+	for i := range numWorkers {
+		go func(id int) {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case job := <-w.jobs:
+					if err := w.generateThumbnail(ctx, job.fileKey, job.contentType); err != nil {
+						slog.Error("thumbnail generation failed", "worker", id, "key", job.fileKey, "error", err)
+					}
+				}
+			}
+		}(i)
+	}
+}
+
+// Submit queues a thumbnail generation job. Non-blocking; drops the job if the queue is full.
+func (w *ThumbnailWorker) Submit(fileKey, contentType string) {
+	select {
+	case w.jobs <- thumbnailJob{fileKey: fileKey, contentType: contentType}:
+		slog.Debug("thumbnail job queued", "key", fileKey)
+	default:
+		slog.Warn("thumbnail job queue full, dropping", "key", fileKey)
+	}
+}
+
+// GenerateThumbnail creates a thumbnail synchronously (used by archival worker etc).
 func (w *ThumbnailWorker) GenerateThumbnail(ctx context.Context, fileKey, contentType string) error {
+	return w.generateThumbnail(ctx, fileKey, contentType)
+}
+
+func (w *ThumbnailWorker) generateThumbnail(ctx context.Context, fileKey, contentType string) error {
 	thumbKey := fileToThumbKey(fileKey)
 	if thumbKey == "" {
 		return fmt.Errorf("cannot derive thumbnail key from %q", fileKey)
