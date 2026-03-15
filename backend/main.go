@@ -35,16 +35,29 @@ func main() {
 	}
 	slog.Info("connected to MinIO", "endpoint", cfg.MinIOEndpoint, "bucket", cfg.MinIOBucket)
 
-	checksums := storage.NewChecksumIndex(store)
-	if err := checksums.Load(context.Background()); err != nil {
-		slog.Error("failed to load checksum index", "error", err)
+	// User store.
+	users := auth.NewUserStore(store)
+	if err := users.Load(context.Background()); err != nil {
+		slog.Error("failed to load user store", "error", err)
+		os.Exit(1)
+	}
+	if err := users.Seed(context.Background(), cfg.Username, cfg.Password); err != nil {
+		slog.Error("failed to seed admin user", "error", err)
 		os.Exit(1)
 	}
 
-	authSvc := auth.NewService(cfg)
+	// Migrate legacy single-user files to admin namespace.
+	if err := storage.MigrateLegacyPrefix(context.Background(), store, cfg.Username); err != nil {
+		slog.Error("failed to migrate legacy files", "error", err)
+	}
+
+	checksums := storage.NewChecksumIndex(store)
+
+	authSvc := auth.NewService(cfg, users)
 	thumbs := worker.NewThumbnailWorker(store)
-	archival := worker.NewArchivalWorker(cfg, store, checksums)
+	archival := worker.NewArchivalWorker(cfg, store, checksums, users)
 	h := handler.New(cfg, store, thumbs, checksums, archival)
+	adminH := handler.NewAdminHandler(users)
 
 	// Start archival worker in background.
 	go archival.Start(context.Background())
@@ -74,12 +87,21 @@ func main() {
 		r.Post("/api/archive/restore", h.RestoreArchive)
 		r.Post("/api/archive/run", h.RunArchival)
 		r.Delete("/api/archive", h.DeleteArchive)
+
+		// Admin endpoints (admin role required).
+		r.Group(func(r chi.Router) {
+			r.Use(authSvc.AdminMiddleware)
+
+			r.Post("/api/admin/users", adminH.CreateUser)
+			r.Get("/api/admin/users", adminH.ListUsers)
+			r.Delete("/api/admin/users/{username}", adminH.DeleteUser)
+			r.Put("/api/admin/users/{username}/password", adminH.ChangePassword)
+		})
 	})
 
 	var ln net.Listener
 	if strings.HasSuffix(cfg.ListenAddr, ".sock") || strings.HasPrefix(cfg.ListenAddr, "/") {
-		// Unix socket mode
-		os.Remove(cfg.ListenAddr) // clean up stale socket
+		os.Remove(cfg.ListenAddr)
 		ln, err = net.Listen("unix", cfg.ListenAddr)
 		if err != nil {
 			slog.Error("failed to listen on unix socket", "path", cfg.ListenAddr, "error", err)
@@ -87,7 +109,6 @@ func main() {
 		}
 		slog.Info("listening on unix socket", "path", cfg.ListenAddr)
 	} else {
-		// TCP mode
 		ln, err = net.Listen("tcp", cfg.ListenAddr)
 		if err != nil {
 			slog.Error("failed to listen on TCP", "addr", cfg.ListenAddr, "error", err)

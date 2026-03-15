@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"reliquary-be/auth"
 	"reliquary-be/config"
 	"reliquary-be/storage"
 )
@@ -13,11 +14,12 @@ import (
 type ArchivalWorker struct {
 	store     *storage.Client
 	checksums *storage.ChecksumIndex
+	users     *auth.UserStore
 	cfg       *config.Config
 }
 
-func NewArchivalWorker(cfg *config.Config, store *storage.Client, checksums *storage.ChecksumIndex) *ArchivalWorker {
-	return &ArchivalWorker{store: store, checksums: checksums, cfg: cfg}
+func NewArchivalWorker(cfg *config.Config, store *storage.Client, checksums *storage.ChecksumIndex, users *auth.UserStore) *ArchivalWorker {
+	return &ArchivalWorker{store: store, checksums: checksums, users: users, cfg: cfg}
 }
 
 // Start runs the archival check on the configured interval.
@@ -27,7 +29,6 @@ func (w *ArchivalWorker) Start(ctx context.Context) {
 		"check_interval", w.cfg.ArchiveCheckInterval,
 	)
 
-	// Run once immediately on startup.
 	w.RunOnce(ctx)
 
 	ticker := time.NewTicker(w.cfg.ArchiveCheckInterval)
@@ -44,15 +45,28 @@ func (w *ArchivalWorker) Start(ctx context.Context) {
 	}
 }
 
-// RunOnce scans user/files/ and archives files older than the threshold.
+// RunOnce scans all users' files and archives those older than the threshold.
 func (w *ArchivalWorker) RunOnce(ctx context.Context) {
 	cutoff := time.Now().Add(-time.Duration(w.cfg.ArchiveAfterDays) * 24 * time.Hour)
 	slog.Info("archival scan starting", "cutoff", cutoff.Format(time.RFC3339))
 
-	objects, err := w.store.ListObjects(ctx, "user/files/")
+	users := w.users.List()
+	totalArchived := 0
+
+	for username := range users {
+		archived := w.archiveUserFiles(ctx, username, cutoff)
+		totalArchived += archived
+	}
+
+	slog.Info("archival scan complete", "total_archived", totalArchived)
+}
+
+func (w *ArchivalWorker) archiveUserFiles(ctx context.Context, username string, cutoff time.Time) int {
+	prefix := username + "/files/"
+	objects, err := w.store.ListObjects(ctx, prefix)
 	if err != nil {
-		slog.Error("archival: failed to list objects", "error", err)
-		return
+		slog.Error("archival: failed to list objects", "user", username, "error", err)
+		return 0
 	}
 
 	archived := 0
@@ -68,27 +82,21 @@ func (w *ArchivalWorker) RunOnce(ctx context.Context) {
 			continue
 		}
 
-		// Move the thumbnail too if it exists.
 		thumbKey := strings.Replace(obj.Key, "/files/", "/thumbs/", 1)
 		archiveThumbKey := strings.Replace(obj.Key, "/files/", "/archive-thumbs/", 1)
 		if err := w.store.MoveObject(ctx, thumbKey, archiveThumbKey); err != nil {
-			// Thumbnail may not exist; that's fine.
 			slog.Debug("archival: no thumbnail to move", "key", thumbKey)
 		}
 
-		// Update checksum index with new key.
 		if stat, err := w.store.StatObject(ctx, archiveKey); err == nil {
-			checksum := stat.UserMetadata["Checksum"]
-			if checksum != "" {
-				if err := w.checksums.Add(ctx, checksum, archiveKey); err != nil {
-					slog.Error("archival: failed to update checksum index", "error", err)
-				}
+			if cs := stat.UserMetadata["Checksum"]; cs != "" {
+				w.checksums.Add(ctx, username, cs, archiveKey)
 			}
 		}
 
 		archived++
-		slog.Info("archived file", "from", obj.Key, "to", archiveKey)
+		slog.Info("archived file", "user", username, "from", obj.Key, "to", archiveKey)
 	}
 
-	slog.Info("archival scan complete", "archived", archived, "total_scanned", len(objects))
+	return archived
 }

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"reliquary-be/auth"
 	"reliquary-be/config"
 	"reliquary-be/storage"
 	"reliquary-be/worker"
@@ -69,7 +70,8 @@ type PresignDownloadResponse struct {
 // triggers thumbnail generation.
 // POST /api/upload
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
-	// 32 MB max memory for multipart parsing; rest spills to disk.
+	username := auth.UsernameFromContext(r.Context())
+
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		httpError(w, "failed to parse multipart form", http.StatusBadRequest)
 		return
@@ -91,18 +93,17 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	baseName := strings.TrimSuffix(filename, path.Ext(filename))
 	ext := path.Ext(filename)
-	fileKey := fmt.Sprintf("user/files/%d/%02d/%s", now.Year(), now.Month(), filename)
+	fileKey := fmt.Sprintf("%s/files/%d/%02d/%s", username, now.Year(), now.Month(), filename)
 
 	// Avoid overwriting existing files by appending a suffix.
 	for i := 1; ; i++ {
 		_, err := h.store.StatObject(r.Context(), fileKey)
 		if err != nil {
-			break // Object doesn't exist, safe to use this key.
+			break
 		}
-		fileKey = fmt.Sprintf("user/files/%d/%02d/%s_%d%s", now.Year(), now.Month(), baseName, i, ext)
+		fileKey = fmt.Sprintf("%s/files/%d/%02d/%s_%d%s", username, now.Year(), now.Month(), baseName, i, ext)
 	}
 
-	// Read file into memory to compute checksum before uploading.
 	data, err := io.ReadAll(file)
 	if err != nil {
 		httpError(w, "failed to read file", http.StatusInternalServerError)
@@ -112,16 +113,19 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	hash := sha256.Sum256(data)
 	checksum := hex.EncodeToString(hash[:])
 
+	// Ensure user's checksum index is loaded.
+	h.checksums.LoadUser(r.Context(), username)
+
 	// Check for duplicate by checksum.
-	if existingKey := h.checksums.Lookup(checksum); existingKey != "" {
-		slog.Info("duplicate detected, skipping upload", "checksum", checksum, "existing_key", existingKey)
+	if existingKey := h.checksums.Lookup(username, checksum); existingKey != "" {
+		slog.Info("duplicate detected", "checksum", checksum, "existing_key", existingKey)
 		jsonResponse(w, UploadResponse{Key: existingKey, Size: int64(len(data)), Duplicate: true})
 		return
 	}
 
 	meta := map[string]string{
-		"Checksum":     checksum,
-		"Upload-Date":  now.UTC().Format(time.RFC3339),
+		"Checksum":      checksum,
+		"Upload-Date":   now.UTC().Format(time.RFC3339),
 		"Original-Name": header.Filename,
 	}
 
@@ -133,12 +137,10 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("file uploaded", "key", fileKey, "size", len(data), "checksum", checksum)
 
-	// Register in checksum index.
-	if err := h.checksums.Add(r.Context(), checksum, fileKey); err != nil {
+	if err := h.checksums.Add(r.Context(), username, checksum, fileKey); err != nil {
 		slog.Error("failed to update checksum index", "error", err)
 	}
 
-	// Generate thumbnail in the background (images and videos).
 	if isImageContentType(contentType) || isVideoContentType(contentType) {
 		go func() {
 			if err := h.thumbs.GenerateThumbnail(context.Background(), fileKey, contentType); err != nil {
@@ -153,74 +155,8 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 // ListFiles returns files with pagination support.
 // GET /api/files?offset=0&limit=50
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-
-	objects, err := h.store.ListObjects(r.Context(), "user/files/")
-	if err != nil {
-		slog.Error("list objects failed", "error", err)
-		httpError(w, "failed to list files", http.StatusInternalServerError)
-		return
-	}
-
-	totalCount := len(objects)
-
-	// Apply pagination.
-	end := offset + limit
-	if offset > len(objects) {
-		objects = nil
-	} else {
-		if end > len(objects) {
-			end = len(objects)
-		}
-		objects = objects[offset:end]
-	}
-
-	files := make([]FileItem, 0, len(objects))
-	for _, obj := range objects {
-		ct := obj.ContentType
-		if ct == "" {
-			ct = mime.TypeByExtension(path.Ext(obj.Key))
-		}
-		if ct == "" {
-			ct = "application/octet-stream"
-		}
-		item := FileItem{
-			Key:          obj.Key,
-			Size:         obj.Size,
-			ContentType:  ct,
-			LastModified: obj.LastModified,
-		}
-		if isImageContentType(ct) || isVideoContentType(ct) {
-			item.ThumbnailKey = strings.Replace(obj.Key, "/files/", "/thumbs/", 1)
-		}
-
-		// Fetch user metadata (checksum, upload date, original name).
-		if stat, err := h.store.StatObject(r.Context(), obj.Key); err == nil {
-			item.Checksum = stat.UserMetadata["Checksum"]
-			item.UploadDate = stat.UserMetadata["Upload-Date"]
-			item.OriginalName = stat.UserMetadata["Original-Name"]
-			// Use stat's content type if available (more reliable).
-			if stat.ContentType != "" {
-				item.ContentType = stat.ContentType
-			}
-		}
-
-		files = append(files, item)
-	}
-
-	jsonResponse(w, FileListResponse{
-		Files:      files,
-		TotalCount: totalCount,
-		Offset:     offset,
-		Limit:      limit,
-	})
+	username := auth.UsernameFromContext(r.Context())
+	h.listObjectsWithPagination(w, r, username+"/files/", "/files/", "/thumbs/")
 }
 
 // PresignDownload generates a presigned GET URL routed through the reverse proxy.
@@ -239,7 +175,6 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rewrite the MinIO URL to go through the reverse proxy at /storage/.
 	proxyURL := h.proxyBaseURL + "/storage" + presignedURL.Path
 	if presignedURL.RawQuery != "" {
 		proxyURL += "?" + presignedURL.RawQuery
@@ -251,6 +186,7 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 // DeleteFile removes a file and its thumbnail from MinIO.
 // DELETE /api/files?key=...
 func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
@@ -263,17 +199,13 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove from checksum index.
-	if err := h.checksums.RemoveByKey(r.Context(), key); err != nil {
+	if err := h.checksums.RemoveByKey(r.Context(), username, key); err != nil {
 		slog.Error("failed to update checksum index on delete", "error", err)
 	}
 
-	// Also delete the thumbnail if one might exist.
 	thumbKey := strings.Replace(key, "/files/", "/thumbs/", 1)
 	if thumbKey != key {
-		if err := h.store.DeleteObject(r.Context(), thumbKey); err != nil {
-			slog.Warn("delete thumbnail failed (may not exist)", "key", thumbKey, "error", err)
-		}
+		h.store.DeleteObject(r.Context(), thumbKey)
 	}
 
 	jsonResponse(w, map[string]string{"status": "deleted"})
@@ -282,6 +214,192 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 // ListArchive returns archived files with pagination.
 // GET /api/archive?offset=0&limit=50
 func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	h.listObjectsWithPagination(w, r, username+"/archive/", "/archive/", "/archive-thumbs/")
+}
+
+// RestoreArchive moves a file from archive back to active files.
+// POST /api/archive/restore?key=...
+func (h *Handler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		httpError(w, "key query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	restoredKey := strings.Replace(key, "/archive/", "/files/", 1)
+
+	if err := h.store.MoveObject(r.Context(), key, restoredKey); err != nil {
+		slog.Error("restore failed", "key", key, "error", err)
+		httpError(w, "failed to restore file", http.StatusInternalServerError)
+		return
+	}
+
+	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
+	restoredThumbKey := strings.Replace(key, "/archive/", "/thumbs/", 1)
+	if err := h.store.MoveObject(r.Context(), thumbKey, restoredThumbKey); err != nil {
+		slog.Debug("no archived thumbnail to restore", "key", thumbKey)
+	}
+
+	if stat, err := h.store.StatObject(r.Context(), restoredKey); err == nil {
+		if cs := stat.UserMetadata["Checksum"]; cs != "" {
+			h.checksums.Add(r.Context(), username, cs, restoredKey)
+		}
+	}
+
+	slog.Info("file restored from archive", "from", key, "to", restoredKey)
+	jsonResponse(w, map[string]string{"status": "restored", "key": restoredKey})
+}
+
+// DeleteArchive removes an archived file.
+// DELETE /api/archive?key=...
+func (h *Handler) DeleteArchive(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		httpError(w, "key query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.store.DeleteObject(r.Context(), key); err != nil {
+		slog.Error("delete archived object failed", "key", key, "error", err)
+		httpError(w, "failed to delete archived file", http.StatusInternalServerError)
+		return
+	}
+
+	h.checksums.RemoveByKey(r.Context(), username, key)
+
+	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
+	if thumbKey != key {
+		h.store.DeleteObject(r.Context(), thumbKey)
+	}
+
+	jsonResponse(w, map[string]string{"status": "deleted"})
+}
+
+// RunArchival triggers the archival process manually.
+// POST /api/archive/run
+func (h *Handler) RunArchival(w http.ResponseWriter, r *http.Request) {
+	go h.archival.RunOnce(context.Background())
+	jsonResponse(w, map[string]string{"status": "archival started"})
+}
+
+// --- Admin handlers ---
+
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+}
+
+type UserInfo struct {
+	Username  string `json:"username"`
+	Role      string `json:"role"`
+	CreatedAt string `json:"created_at"`
+}
+
+type ChangePasswordRequest struct {
+	Password string `json:"password"`
+}
+
+func NewAdminHandler(users *auth.UserStore) *AdminHandler {
+	return &AdminHandler{users: users}
+}
+
+type AdminHandler struct {
+	users *auth.UserStore
+}
+
+// CreateUser creates a new user.
+// POST /api/admin/users
+func (ah *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		httpError(w, "username and password are required", http.StatusBadRequest)
+		return
+	}
+
+	role := auth.RoleUser
+	if req.Role == "admin" {
+		role = auth.RoleAdmin
+	}
+
+	if err := ah.users.Create(r.Context(), req.Username, req.Password, role); err != nil {
+		httpError(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "created", "username": req.Username})
+}
+
+// ListUsers returns all users.
+// GET /api/admin/users
+func (ah *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	users := ah.users.List()
+	result := make([]UserInfo, 0, len(users))
+	for name, u := range users {
+		result = append(result, UserInfo{
+			Username:  name,
+			Role:      string(u.Role),
+			CreatedAt: u.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	jsonResponse(w, result)
+}
+
+// DeleteUser deletes a user.
+// DELETE /api/admin/users/{username}
+func (ah *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	username := r.PathValue("username")
+	if username == "" {
+		httpError(w, "username is required", http.StatusBadRequest)
+		return
+	}
+	if err := ah.users.Delete(r.Context(), username); err != nil {
+		httpError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "deleted"})
+}
+
+// ChangePassword changes a user's password. Admin can change any; users can change their own.
+// PUT /api/admin/users/{username}/password
+func (ah *AdminHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	target := r.PathValue("username")
+	if target == "" {
+		httpError(w, "username is required", http.StatusBadRequest)
+		return
+	}
+
+	caller := auth.UsernameFromContext(r.Context())
+	callerRole := auth.RoleFromContext(r.Context())
+	if callerRole != auth.RoleAdmin && caller != target {
+		httpError(w, "can only change your own password", http.StatusForbidden)
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
+		httpError(w, "password is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := ah.users.ChangePassword(r.Context(), target, req.Password); err != nil {
+		httpError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	jsonResponse(w, map[string]string{"status": "password changed"})
+}
+
+// --- Shared helpers ---
+
+func (h *Handler) listObjectsWithPagination(w http.ResponseWriter, r *http.Request, prefix, filesSegment, thumbsSegment string) {
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 200 {
@@ -291,10 +409,10 @@ func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	objects, err := h.store.ListObjects(r.Context(), "user/archive/")
+	objects, err := h.store.ListObjects(r.Context(), prefix)
 	if err != nil {
-		slog.Error("list archived objects failed", "error", err)
-		httpError(w, "failed to list archived files", http.StatusInternalServerError)
+		slog.Error("list objects failed", "prefix", prefix, "error", err)
+		httpError(w, "failed to list files", http.StatusInternalServerError)
 		return
 	}
 
@@ -326,7 +444,7 @@ func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
 			LastModified: obj.LastModified,
 		}
 		if isImageContentType(ct) || isVideoContentType(ct) {
-			item.ThumbnailKey = strings.Replace(obj.Key, "/archive/", "/archive-thumbs/", 1)
+			item.ThumbnailKey = strings.Replace(obj.Key, filesSegment, thumbsSegment, 1)
 		}
 		if stat, err := h.store.StatObject(r.Context(), obj.Key); err == nil {
 			item.Checksum = stat.UserMetadata["Checksum"]
@@ -346,77 +464,6 @@ func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
 		Limit:      limit,
 	})
 }
-
-// RestoreArchive moves a file from archive back to active files.
-// POST /api/archive/restore?key=...
-func (h *Handler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Query().Get("key")
-	if key == "" {
-		httpError(w, "key query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	restoredKey := strings.Replace(key, "/archive/", "/files/", 1)
-
-	if err := h.store.MoveObject(r.Context(), key, restoredKey); err != nil {
-		slog.Error("restore failed", "key", key, "error", err)
-		httpError(w, "failed to restore file", http.StatusInternalServerError)
-		return
-	}
-
-	// Move thumbnail back too.
-	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
-	restoredThumbKey := strings.Replace(key, "/archive/", "/thumbs/", 1)
-	if err := h.store.MoveObject(r.Context(), thumbKey, restoredThumbKey); err != nil {
-		slog.Debug("no archived thumbnail to restore", "key", thumbKey)
-	}
-
-	// Update checksum index.
-	if stat, err := h.store.StatObject(r.Context(), restoredKey); err == nil {
-		if cs := stat.UserMetadata["Checksum"]; cs != "" {
-			h.checksums.Add(r.Context(), cs, restoredKey)
-		}
-	}
-
-	slog.Info("file restored from archive", "from", key, "to", restoredKey)
-	jsonResponse(w, map[string]string{"status": "restored", "key": restoredKey})
-}
-
-// DeleteArchive removes an archived file.
-// DELETE /api/archive?key=...
-func (h *Handler) DeleteArchive(w http.ResponseWriter, r *http.Request) {
-	key := r.URL.Query().Get("key")
-	if key == "" {
-		httpError(w, "key query parameter is required", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.store.DeleteObject(r.Context(), key); err != nil {
-		slog.Error("delete archived object failed", "key", key, "error", err)
-		httpError(w, "failed to delete archived file", http.StatusInternalServerError)
-		return
-	}
-
-	if err := h.checksums.RemoveByKey(r.Context(), key); err != nil {
-		slog.Error("failed to update checksum index on archive delete", "error", err)
-	}
-
-	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
-	if thumbKey != key {
-		h.store.DeleteObject(r.Context(), thumbKey)
-	}
-
-	jsonResponse(w, map[string]string{"status": "deleted"})
-}
-
-// RunArchival triggers the archival process manually.
-// POST /api/archive/run
-func (h *Handler) RunArchival(w http.ResponseWriter, r *http.Request) {
-	go h.archival.RunOnce(context.Background())
-	jsonResponse(w, map[string]string{"status": "archival started"})
-}
-
-// --- Helpers ---
 
 func sanitizeFilename(name string) string {
 	return path.Base(name)
