@@ -1,9 +1,10 @@
-import 'package:file_picker/file_picker.dart';
+import 'dart:io' show File;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mime/mime.dart';
 
+import '../models/upload_file.dart';
 import '../services/api_service.dart';
 import '../services/file_picker_service.dart' as picker;
 
@@ -17,17 +18,16 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  List<PlatformFile> _selectedFiles = [];
+  List<UploadFile> _selectedFiles = [];
   final Map<String, _UploadProgress> _progress = {};
   bool _uploading = false;
 
   Future<void> _pickFiles() async {
     try {
       final result = await picker.pickFiles(allowMultiple: true);
-
-      if (result != null && result.files.isNotEmpty) {
+      if (result != null && result.isNotEmpty) {
         setState(() {
-          _selectedFiles = result.files;
+          _selectedFiles = result;
           _progress.clear();
         });
       }
@@ -39,37 +39,57 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
+  Future<void> _pickFolder() async {
+    try {
+      final result = await picker.pickFolder();
+      if (result != null && result.isNotEmpty) {
+        setState(() {
+          _selectedFiles = result;
+          _progress.clear();
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick folder: $e')),
+      );
+    }
+  }
+
   Future<void> _uploadAll() async {
     if (_selectedFiles.isEmpty) return;
 
     setState(() => _uploading = true);
 
     for (final file in _selectedFiles) {
-      final filename = file.name;
+      final key = file.displayName;
       setState(() {
-        _progress[filename] =
+        _progress[key] =
             _UploadProgress(status: 'INITIATING...', fraction: 0);
       });
 
       try {
         final contentType =
-            lookupMimeType(filename) ?? 'application/octet-stream';
+            lookupMimeType(file.name) ?? 'application/octet-stream';
 
         List<int> bytes;
-        if (kIsWeb) {
+        if (file.bytes != null) {
           bytes = file.bytes!;
+        } else if (!kIsWeb && file.filePath != null) {
+          bytes = await File(file.filePath!).readAsBytes();
         } else {
-          bytes = await file.xFile.readAsBytes();
+          throw Exception('No file data available');
         }
 
         final result = await widget.apiService.uploadFile(
-          filename,
+          file.name,
           bytes,
           contentType,
+          relativePath: file.relativePath,
           onProgress: (sent, total) {
             if (total > 0) {
               setState(() {
-                _progress[filename] = _UploadProgress(
+                _progress[key] = _UploadProgress(
                   status: 'TRANSMITTING...',
                   fraction: sent / total,
                 );
@@ -79,7 +99,7 @@ class _UploadScreenState extends State<UploadScreen> {
         );
 
         setState(() {
-          _progress[filename] = _UploadProgress(
+          _progress[key] = _UploadProgress(
             status: result.duplicate ? 'DUPLICATE_SKIPPED' : 'PRESERVED',
             fraction: 1.0,
             done: true,
@@ -87,7 +107,7 @@ class _UploadScreenState extends State<UploadScreen> {
         });
       } catch (e) {
         setState(() {
-          _progress[filename] =
+          _progress[key] =
               _UploadProgress(status: 'FAILED: $e', error: true);
         });
       }
@@ -112,37 +132,72 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drop zone style button — must use Material button for web
-            // file picker to work (browser requires trusted user gesture)
-            SizedBox(
-              height: 120,
-              child: OutlinedButton(
-                onPressed: _uploading ? null : _pickFiles,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFE0E0E0), width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 100,
+                    child: OutlinedButton(
+                      onPressed: _uploading ? null : _pickFiles,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: Color(0xFFE0E0E0), width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.upload_file,
+                              size: 28, color: Colors.grey[400]),
+                          const SizedBox(height: 6),
+                          Text('SELECT_FILES',
+                              style: GoogleFonts.spaceMono(
+                                  fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.cloud_upload_outlined,
-                        size: 36, color: Colors.grey[400]),
-                    const SizedBox(height: 8),
-                    Text(
-                      'SELECT_FILES',
-                      style: GoogleFonts.spaceMono(
-                          fontSize: 12, color: Colors.grey),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 100,
+                    child: OutlinedButton(
+                      onPressed: _uploading ? null : _pickFolder,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                            color: Color(0xFFE0E0E0), width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.folder_open,
+                              size: 28, color: Colors.grey[400]),
+                          const SizedBox(height: 6),
+                          Text('SELECT_FOLDER',
+                              style: GoogleFonts.spaceMono(
+                                  fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
                     ),
-                    Text(
-                      '${_selectedFiles.length} selected',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
+            if (_selectedFiles.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '${_selectedFiles.length} file(s) selected',
+                style:
+                    GoogleFonts.spaceMono(fontSize: 11, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
             const SizedBox(height: 16),
             if (_selectedFiles.isNotEmpty)
               SizedBox(
@@ -161,14 +216,17 @@ class _UploadScreenState extends State<UploadScreen> {
                 separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   final file = _selectedFiles[index];
-                  final progress = _progress[file.name];
+                  final key = file.displayName;
+                  final progress = _progress[key];
                   return ListTile(
                     leading: Icon(
                       progress?.done == true
                           ? Icons.check_circle
                           : progress?.error == true
                               ? Icons.error
-                              : Icons.insert_drive_file,
+                              : file.relativePath != null
+                                  ? Icons.folder
+                                  : Icons.insert_drive_file,
                       color: progress?.done == true
                           ? Colors.green
                           : progress?.error == true
@@ -176,7 +234,7 @@ class _UploadScreenState extends State<UploadScreen> {
                               : Colors.grey,
                       size: 20,
                     ),
-                    title: Text(file.name,
+                    title: Text(file.displayName,
                         style: const TextStyle(fontSize: 13)),
                     subtitle: progress != null
                         ? Column(
@@ -190,7 +248,8 @@ class _UploadScreenState extends State<UploadScreen> {
                                   padding: const EdgeInsets.only(top: 4),
                                   child: LinearProgressIndicator(
                                     value: progress.fraction,
-                                    backgroundColor: const Color(0xFFE0E0E0),
+                                    backgroundColor:
+                                        const Color(0xFFE0E0E0),
                                     color: const Color(0xFFEC3713),
                                   ),
                                 ),

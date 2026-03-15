@@ -2,16 +2,33 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:typed_data';
 import 'package:web/web.dart' as web;
-import 'package:file_picker/file_picker.dart';
+
+import '../models/upload_file.dart';
 
 /// Reliable web file picker using the HTML file input directly.
-Future<FilePickerResult?> pickFilesPlatform({bool allowMultiple = true}) async {
-  final completer = Completer<FilePickerResult?>();
+Future<List<UploadFile>?> pickFilesPlatform({bool allowMultiple = true}) async {
+  return _pick(allowMultiple: allowMultiple, directory: false);
+}
+
+/// Web folder picker using webkitdirectory.
+Future<List<UploadFile>?> pickFolderPlatform() async {
+  return _pick(allowMultiple: true, directory: true);
+}
+
+Future<List<UploadFile>?> _pick({
+  required bool allowMultiple,
+  required bool directory,
+}) async {
+  final completer = Completer<List<UploadFile>?>();
 
   final input = web.HTMLInputElement()
     ..type = 'file'
     ..multiple = allowMultiple
     ..style.display = 'none';
+
+  if (directory) {
+    input.setAttribute('webkitdirectory', '');
+  }
 
   input.onChange.listen((event) async {
     final files = input.files;
@@ -21,20 +38,23 @@ Future<FilePickerResult?> pickFilesPlatform({bool allowMultiple = true}) async {
       return;
     }
 
-    final platformFiles = <PlatformFile>[];
+    final uploadFiles = <UploadFile>[];
 
     for (var i = 0; i < files.length; i++) {
       final file = files.item(i)!;
       final bytes = await _readFileBytes(file);
-      platformFiles.add(PlatformFile(
+      final relativePath = file.webkitRelativePath;
+
+      uploadFiles.add(UploadFile(
         name: file.name,
         size: file.size,
         bytes: bytes,
+        relativePath: relativePath.isNotEmpty ? relativePath : null,
       ));
     }
 
     if (!completer.isCompleted) {
-      completer.complete(FilePickerResult(platformFiles));
+      completer.complete(uploadFiles);
     }
     input.remove();
   });

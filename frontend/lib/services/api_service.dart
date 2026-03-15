@@ -39,13 +39,18 @@ class ApiService {
     String filename,
     List<int> bytes,
     String contentType, {
+    String? relativePath,
     void Function(int, int)? onProgress,
   }) async {
-    final formData = FormData.fromMap({
+    final map = <String, dynamic>{
       'file': MultipartFile.fromBytes(bytes,
           filename: filename,
           contentType: DioMediaType.parse(contentType)),
-    });
+    };
+    if (relativePath != null) {
+      map['path'] = relativePath;
+    }
+    final formData = FormData.fromMap(map);
 
     final response = await _dio.post(
       '/api/upload',
