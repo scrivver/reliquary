@@ -303,12 +303,13 @@ type ChangePasswordRequest struct {
 	Password string `json:"password"`
 }
 
-func NewAdminHandler(users *auth.UserStore) *AdminHandler {
-	return &AdminHandler{users: users}
+func NewAdminHandler(users *auth.UserStore, store *storage.Client) *AdminHandler {
+	return &AdminHandler{users: users, store: store}
 }
 
 type AdminHandler struct {
 	users *auth.UserStore
+	store *storage.Client
 }
 
 // CreateUser creates a new user.
@@ -395,6 +396,53 @@ func (ah *AdminHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]string{"status": "password changed"})
+}
+
+// --- Stats ---
+
+// Stats returns storage analytics for the authenticated user.
+// GET /api/stats
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
+	stats, err := h.store.ComputeUserStats(r.Context(), username)
+	if err != nil {
+		slog.Error("stats failed", "user", username, "error", err)
+		httpError(w, "failed to compute stats", http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, stats)
+}
+
+// AdminStats returns aggregate storage analytics across all users.
+// GET /api/admin/stats
+func (ah *AdminHandler) AdminStats(w http.ResponseWriter, r *http.Request) {
+	users := ah.users.List()
+
+	type perUser struct {
+		Username string `json:"username"`
+		storage.UserStats
+	}
+
+	var allStats []perUser
+	var totalSize int64
+	var totalFiles int
+
+	for username := range users {
+		stats, err := ah.store.ComputeUserStats(r.Context(), username)
+		if err != nil {
+			slog.Error("admin stats failed", "user", username, "error", err)
+			continue
+		}
+		allStats = append(allStats, perUser{Username: username, UserStats: stats})
+		totalSize += stats.TotalSize
+		totalFiles += stats.FileCount
+	}
+
+	jsonResponse(w, map[string]any{
+		"users":       allStats,
+		"total_size":  totalSize,
+		"total_files": totalFiles,
+	})
 }
 
 // --- Shared helpers ---

@@ -57,7 +57,7 @@ func main() {
 	thumbs := worker.NewThumbnailWorker(store)
 	archival := worker.NewArchivalWorker(cfg, store, checksums, users)
 	h := handler.New(cfg, store, thumbs, checksums, archival)
-	adminH := handler.NewAdminHandler(users)
+	adminH := handler.NewAdminHandler(users, store)
 
 	// Start archival worker in background.
 	go archival.Start(context.Background())
@@ -83,6 +83,8 @@ func main() {
 		r.Get("/api/files/presign", h.PresignDownload)
 		r.Delete("/api/files", h.DeleteFile)
 
+		r.Get("/api/stats", h.Stats)
+
 		r.Get("/api/archive", h.ListArchive)
 		r.Post("/api/archive/restore", h.RestoreArchive)
 		r.Post("/api/archive/run", h.RunArchival)
@@ -92,6 +94,7 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(authSvc.AdminMiddleware)
 
+			r.Get("/api/admin/stats", adminH.AdminStats)
 			r.Post("/api/admin/users", adminH.CreateUser)
 			r.Get("/api/admin/users", adminH.ListUsers)
 			r.Delete("/api/admin/users/{username}", adminH.DeleteUser)
