@@ -83,6 +83,7 @@ func main() {
 		r.Post("/api/upload", h.Upload)
 		r.Get("/api/files", h.ListFiles)
 		r.Get("/api/files/presign", h.PresignDownload)
+		r.Post("/api/files/download", h.BatchDownload)
 		r.Delete("/api/files", h.DeleteFile)
 
 		r.Get("/api/stats", h.Stats)

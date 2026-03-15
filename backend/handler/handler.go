@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -62,6 +63,10 @@ type FileListResponse struct {
 
 type PresignDownloadResponse struct {
 	URL string `json:"url"`
+}
+
+type BatchDownloadRequest struct {
+	Keys []string `json:"keys"`
 }
 
 // --- Handlers ---
@@ -187,6 +192,52 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, PresignDownloadResponse{URL: relativeURL})
+}
+
+// BatchDownload creates a zip archive of the requested files and streams it.
+// POST /api/files/download
+func (h *Handler) BatchDownload(w http.ResponseWriter, r *http.Request) {
+	var req BatchDownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.Keys) == 0 {
+		httpError(w, "no files specified", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="reliquary-download.zip"`)
+
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	for _, key := range req.Keys {
+		obj, err := h.store.GetObject(r.Context(), key)
+		if err != nil {
+			slog.Error("batch download: failed to get object", "key", key, "error", err)
+			continue
+		}
+
+		// Use just the filename part for the zip entry.
+		parts := strings.Split(key, "/")
+		name := parts[len(parts)-1]
+
+		entry, err := zipWriter.Create(name)
+		if err != nil {
+			obj.Close()
+			slog.Error("batch download: failed to create zip entry", "key", key, "error", err)
+			continue
+		}
+
+		if _, err := io.Copy(entry, obj); err != nil {
+			obj.Close()
+			slog.Error("batch download: failed to write zip entry", "key", key, "error", err)
+			continue
+		}
+		obj.Close()
+	}
 }
 
 // DeleteFile removes a file and its thumbnail from MinIO.
