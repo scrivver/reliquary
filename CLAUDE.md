@@ -113,7 +113,6 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Backend listen address (path = unix socket) |
-| `PROXY_BASE_URL` | `http://localhost:2080` | Caddy proxy URL for presigned URL rewriting |
 | `AUTH_USERNAME` | `admin` | Initial admin username |
 | `AUTH_PASSWORD` | `admin` | Initial admin password |
 | `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret |
@@ -133,3 +132,43 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Nix store paths in process-compose**: Commands in `minio.nix` use `pkgs.writeShellScript`, so the generated YAML references `/nix/store/...` paths directly. The YAML is only valid inside the dev shell.
 - **MinIO credentials**: Default dev credentials are `minioadmin/minioadmin`. Default bucket is `reliquary`.
 - **Layered dev shells**: Each shell (`infra`, `backend`, `frontend`) composes via `inputsFrom`, so every shell includes infra tooling. The default `full` shell combines backend and frontend.
+
+## Deployment
+
+The project builds a single all-in-one OCI container image using Nix's `dockerTools`:
+
+```bash
+# Build container (MinIO + Go backend + Caddy + ffmpeg, all from nixpkgs)
+nix build .#container
+docker load < result
+
+# Build Flutter web and copy into image
+cd frontend && flutter build web --release && cd ..
+docker create --name tmp reliquary:latest
+docker cp frontend/build/web/. tmp:/srv/web/
+docker commit tmp reliquary:latest && docker rm tmp
+
+# Or use the deploy script
+./bin/deploy
+```
+
+Run with docker-compose:
+
+```bash
+cp .env.example .env    # Edit with production values
+docker compose up -d    # Available at http://localhost:2080
+```
+
+### Nix Build Targets
+
+- `nix build .#backend` — Go binary with ffmpeg in PATH
+- `nix build .#container` — OCI image (reliquary.tar.gz)
+
+### Container Architecture
+
+Single container running three processes:
+- **MinIO** (`127.0.0.1:9000`) — object storage, internal only
+- **Go backend** (unix socket) — API server
+- **Caddy** (`:2080`) — reverse proxy + static file server for Flutter web
+
+MinIO data persisted via Docker volume. Flutter web build mounted at `/srv/web`.

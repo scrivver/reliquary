@@ -167,3 +167,87 @@ Features:
 - Admin user management (create, delete, change password)
 - Configurable server URL (settings screen)
 - Change password (settings screen)
+
+## Deployment
+
+### Build
+
+Requires [Nix](https://nixos.org/) with flakes enabled and [Docker](https://docs.docker.com/get-docker/).
+
+```bash
+# 1. Build the container image (includes MinIO, Go backend, Caddy, ffmpeg)
+nix build .#container
+docker load < result
+
+# 2. Build the Flutter web frontend
+cd frontend
+flutter build web --release
+cd ..
+
+# 3. Copy the web build into the container
+docker create --name reliquary-tmp reliquary:latest
+docker cp frontend/build/web/. reliquary-tmp:/srv/web/
+docker commit reliquary-tmp reliquary:latest
+docker rm reliquary-tmp
+```
+
+Or use the deploy script which does all of the above:
+
+```bash
+./bin/deploy
+```
+
+### Run
+
+```bash
+# Copy and edit the environment file
+cp .env.example .env
+# Edit .env with your production values (especially JWT_SECRET and passwords)
+
+# Start
+docker compose up -d
+```
+
+The application is available at `http://localhost:2080`.
+
+### Configuration
+
+All configuration is via environment variables in `.env`:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RELIQUARY_PORT` | `2080` | Host port to expose |
+| `MINIO_ROOT_USER` | `minioadmin` | MinIO admin username |
+| `MINIO_ROOT_PASSWORD` | `minioadmin` | MinIO admin password |
+| `MINIO_BUCKET` | `reliquary` | MinIO bucket name |
+| `AUTH_USERNAME` | `admin` | Initial admin username |
+| `AUTH_PASSWORD` | `admin` | Initial admin password |
+| `JWT_SECRET` | — | JWT signing secret (must change for production) |
+| `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
+| `ARCHIVE_AFTER_DAYS` | `90` | Days before auto-archival |
+| `ARCHIVE_CHECK_HOURS` | `24` | Hours between archival scans |
+
+### Architecture
+
+The container runs three processes managed by the entrypoint script:
+- **MinIO** — object storage on `127.0.0.1:9000` (internal only)
+- **Go backend** — API server on a unix socket
+- **Caddy** — reverse proxy on `:2080`, serves Flutter web build, routes `/api/*` and `/storage/*`
+
+MinIO data is persisted via a Docker volume (`minio_data`).
+
+### Mobile Apps
+
+Build native apps that connect to your Reliquary instance:
+
+```bash
+cd frontend
+
+# Android
+flutter build apk --release
+
+# iOS (requires macOS + Xcode)
+flutter build ipa --release
+```
+
+Set the server URL on the login screen to point to your deployment (e.g., `http://192.168.1.100:2080`).
