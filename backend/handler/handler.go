@@ -24,18 +24,20 @@ import (
 type Handler struct {
 	store        *storage.Client
 	thumbs       *worker.ThumbnailWorker
+	checksums    *storage.ChecksumIndex
 	proxyBaseURL string
 }
 
-func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker) *Handler {
-	return &Handler{store: store, thumbs: thumbs, proxyBaseURL: cfg.ProxyBaseURL}
+func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker, checksums *storage.ChecksumIndex) *Handler {
+	return &Handler{store: store, thumbs: thumbs, checksums: checksums, proxyBaseURL: cfg.ProxyBaseURL}
 }
 
 // --- Request / Response types ---
 
 type UploadResponse struct {
-	Key  string `json:"key"`
-	Size int64  `json:"size"`
+	Key       string `json:"key"`
+	Size      int64  `json:"size"`
+	Duplicate bool   `json:"duplicate,omitempty"`
 }
 
 type FileItem struct {
@@ -109,6 +111,13 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	hash := sha256.Sum256(data)
 	checksum := hex.EncodeToString(hash[:])
 
+	// Check for duplicate by checksum.
+	if existingKey := h.checksums.Lookup(checksum); existingKey != "" {
+		slog.Info("duplicate detected, skipping upload", "checksum", checksum, "existing_key", existingKey)
+		jsonResponse(w, UploadResponse{Key: existingKey, Size: int64(len(data)), Duplicate: true})
+		return
+	}
+
 	meta := map[string]string{
 		"Checksum":     checksum,
 		"Upload-Date":  now.UTC().Format(time.RFC3339),
@@ -122,6 +131,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("file uploaded", "key", fileKey, "size", len(data), "checksum", checksum)
+
+	// Register in checksum index.
+	if err := h.checksums.Add(r.Context(), checksum, fileKey); err != nil {
+		slog.Error("failed to update checksum index", "error", err)
+	}
 
 	// Generate thumbnail in the background (images and videos).
 	if isImageContentType(contentType) || isVideoContentType(contentType) {
@@ -246,6 +260,11 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		slog.Error("delete object failed", "key", key, "error", err)
 		httpError(w, "failed to delete file", http.StatusInternalServerError)
 		return
+	}
+
+	// Remove from checksum index.
+	if err := h.checksums.RemoveByKey(r.Context(), key); err != nil {
+		slog.Error("failed to update checksum index on delete", "error", err)
 	}
 
 	// Also delete the thumbnail if one might exist.

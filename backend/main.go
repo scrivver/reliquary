@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net"
 	"net/http"
@@ -34,9 +35,15 @@ func main() {
 	}
 	slog.Info("connected to MinIO", "endpoint", cfg.MinIOEndpoint, "bucket", cfg.MinIOBucket)
 
+	checksums := storage.NewChecksumIndex(store)
+	if err := checksums.Load(context.Background()); err != nil {
+		slog.Error("failed to load checksum index", "error", err)
+		os.Exit(1)
+	}
+
 	authSvc := auth.NewService(cfg)
 	thumbs := worker.NewThumbnailWorker(store)
-	h := handler.New(cfg, store, thumbs)
+	h := handler.New(cfg, store, thumbs, checksums)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
