@@ -52,10 +52,11 @@ let
       pkgs.curl
     ]}"
 
+    export HOME="/root"
     export LISTEN_ADDR="/run/reliquary/backend.sock"
     export MINIO_PORT="9000"
 
-    mkdir -p /run/reliquary /data/minio
+    mkdir -p /run/reliquary /data/minio /root
 
     # Start MinIO
     export MINIO_ROOT_USER="''${MINIO_ROOT_USER:-minioadmin}"
@@ -121,10 +122,13 @@ pkgs.dockerTools.buildLayeredImage {
     pkgs.coreutils
     pkgs.curl
     pkgs.bash
+    pkgs.glibc.bin  # provides getent, needed by minio/mc
   ];
 
   extraCommands = ''
-    mkdir -p srv/web run/reliquary data/minio tmp
+    mkdir -p srv/web run/reliquary data/minio tmp etc
+    echo "root:x:0:0:root:/root:/bin/bash" > etc/passwd
+    echo "root:x:0:" > etc/group
   '';
 
   config = {

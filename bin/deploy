@@ -4,6 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Auto-detect container runtime
+if command -v docker &>/dev/null; then
+  CTR=docker
+elif command -v podman &>/dev/null; then
+  CTR=podman
+else
+  echo "ERROR: Neither docker nor podman found in PATH" >&2
+  exit 1
+fi
+echo "Using container runtime: $CTR"
+
 echo "=== Building Reliquary ==="
 
 # 1. Build Flutter web
@@ -18,17 +29,17 @@ cd "$PROJECT_ROOT"
 nix build .#container
 echo "Container image built."
 
-# 3. Load the image into Docker
-echo "Loading image into Docker..."
-docker load < result
+# 3. Load the image
+echo "Loading image..."
+$CTR load < result
 echo "Image loaded."
 
-# 4. Copy Flutter web build into the volume
-echo "Copying Flutter web build..."
-CONTAINER_ID=$(docker create reliquary:latest)
-docker cp "$PROJECT_ROOT/frontend/build/web/." "$CONTAINER_ID:/srv/web/"
-docker commit "$CONTAINER_ID" reliquary:latest
-docker rm "$CONTAINER_ID"
+# 4. Copy Flutter web build into the image
+echo "Copying Flutter web build into image..."
+$CTR create --name reliquary-tmp reliquary:latest
+$CTR cp "$PROJECT_ROOT/frontend/build/web/." reliquary-tmp:/srv/web/
+$CTR commit reliquary-tmp reliquary:latest
+$CTR rm reliquary-tmp
 echo "Web build copied into image."
 
 echo ""
@@ -36,5 +47,5 @@ echo "=== Ready to deploy ==="
 echo ""
 echo "  cp .env.example .env"
 echo "  # Edit .env with your production values"
-echo "  docker compose up -d"
+echo "  $CTR compose up -d"
 echo ""
