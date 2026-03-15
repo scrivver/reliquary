@@ -22,8 +22,15 @@
 	infraShell = import ./shells/infra.nix { inherit pkgs processComposeConfig; };
 	backendShell  = import ./shells/backend.nix { inherit pkgs infraShell; };
 	frontendShell = import ./shells/frontend.nix { inherit pkgs infraShell; };
+	backendPkg = import ./nix/backend.nix { inherit pkgs; };
+	containerImg = import ./nix/container.nix { inherit pkgs; };
 	in
 	{
+	packages = {
+	backend = backendPkg;
+	container = containerImg;
+	default = backendPkg;
+	};
 	devShells = rec {
 	infra    = infraShell;
 	backend  = backendShell;

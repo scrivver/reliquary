@@ -73,7 +73,7 @@ let
     done
 
     # Create bucket
-    BUCKET="''${MINIO_BUCKET:-smartaffiliate}"
+    BUCKET="''${MINIO_BUCKET:-reliquary}"
     mc alias set local "http://127.0.0.1:9000" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" --api S3v4
     mc mb --ignore-existing "local/$BUCKET"
     mc anonymous set download "local/$BUCKET"
@@ -133,7 +133,7 @@ pkgs.dockerTools.buildLayeredImage {
     Env = [
       "MINIO_ROOT_USER=minioadmin"
       "MINIO_ROOT_PASSWORD=minioadmin"
-      "MINIO_BUCKET=smartaffiliate"
+      "MINIO_BUCKET=reliquary"
       "AUTH_USERNAME=admin"
       "AUTH_PASSWORD=admin"
       "JWT_SECRET=change-me-in-production"
