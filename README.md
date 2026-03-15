@@ -183,13 +183,21 @@ Download the latest prebuilt image from [GitHub Releases](https://github.com/chu
 docker load < reliquary-full.tar.gz
 # or: podman load < reliquary-full.tar.gz
 
-# Configure
-cp .env.example .env
-# Edit .env with your production values (especially JWT_SECRET and passwords)
-
 # Run
-docker compose up -d
-# or: podman compose up -d
+docker run -d --name reliquary \
+  -p 2080:2080 \
+  -v reliquary_data:/data/minio \
+  -e JWT_SECRET=change-me-in-production \
+  -e AUTH_PASSWORD=change-me-in-production \
+  reliquary:latest
+
+# or with podman:
+podman run -d --name reliquary \
+  -p 2080:2080 \
+  -v reliquary_data:/data/minio \
+  -e JWT_SECRET=change-me-in-production \
+  -e AUTH_PASSWORD=change-me-in-production \
+  reliquary:latest
 ```
 
 The application is available at `http://localhost:2080`. Default credentials: `admin` / `admin`.
