@@ -20,8 +20,9 @@ const (
 )
 
 type Service struct {
-	secret []byte
-	users  *UserStore
+	secret      []byte
+	users       *UserStore
+	rateLimiter *RateLimiter
 }
 
 type Claims struct {
@@ -43,12 +44,19 @@ type LoginResponse struct {
 
 func NewService(cfg *config.Config, users *UserStore) *Service {
 	return &Service{
-		secret: []byte(cfg.JWTSecret),
-		users:  users,
+		secret:      []byte(cfg.JWTSecret),
+		users:       users,
+		rateLimiter: NewRateLimiter(),
 	}
 }
 
 func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
+	ip := ExtractIP(r)
+	if !s.rateLimiter.Allow(ip) {
+		http.Error(w, "too many login attempts, try again later", http.StatusTooManyRequests)
+		return
+	}
+
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -60,6 +68,9 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
+
+	// Reset rate limit on successful login.
+	s.rateLimiter.Reset(ip)
 
 	claims := &Claims{
 		Username: req.Username,
