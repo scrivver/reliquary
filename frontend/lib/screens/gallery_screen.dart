@@ -4,6 +4,7 @@ import '../main.dart';
 import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import 'admin_screen.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'upload_screen.dart';
@@ -25,6 +26,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   bool _hasMore = false;
   int _totalCount = 0;
   String? _error;
+  String _username = '';
+  bool _isAdmin = false;
 
   static const _pageSize = 50;
 
@@ -35,7 +38,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
       widget.authService,
       onUnauthorized: _handleUnauthorized,
     );
+    _loadUserInfo();
     _loadFiles();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final username = await widget.authService.getUsername();
+    final isAdmin = await widget.authService.isAdmin();
+    if (mounted) {
+      setState(() {
+        _username = username ?? '';
+        _isAdmin = isAdmin;
+      });
+    }
   }
 
   void _handleUnauthorized() {
@@ -206,14 +221,31 @@ class _GalleryScreenState extends State<GalleryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_totalCount > 0
-            ? 'Reliquary ($_totalCount files)'
-            : 'Reliquary'),
+            ? '$_username ($_totalCount files)'
+            : _username.isNotEmpty ? _username : 'Reliquary'),
         actions: [
+          if (_isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings),
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => AdminScreen(apiService: _apiService),
+                  ),
+                );
+              },
+              tooltip: 'User Management',
+            ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                MaterialPageRoute(
+                  builder: (_) => SettingsScreen(
+                    apiService: _apiService,
+                    authService: widget.authService,
+                  ),
+                ),
               );
             },
             tooltip: 'Settings',
