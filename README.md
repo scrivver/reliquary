@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="Reliquary - Digital Cold Storage" width="640">
+</p>
+
 # Reliquary
 
 A cold storage system for forgotten artifacts.
