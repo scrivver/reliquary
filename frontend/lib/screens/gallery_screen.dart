@@ -5,6 +5,7 @@ import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'admin_screen.dart';
+import 'archive_screen.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'stats_screen.dart';
@@ -237,6 +238,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
               },
               tooltip: 'User Management',
             ),
+          IconButton(
+            icon: const Icon(Icons.archive),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ArchiveScreen(apiService: _apiService),
+                ),
+              );
+            },
+            tooltip: 'Archive',
+          ),
           IconButton(
             icon: const Icon(Icons.bar_chart),
             onPressed: () {

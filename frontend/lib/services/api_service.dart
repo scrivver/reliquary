@@ -95,6 +95,42 @@ class ApiService {
     await _dio.delete('/api/files', queryParameters: {'key': key});
   }
 
+  // --- Archive API ---
+
+  /// List archived files with pagination.
+  Future<FileListResult> listArchive({int offset = 0, int limit = 50}) async {
+    final response = await _dio.get('/api/archive', queryParameters: {
+      'offset': offset,
+      'limit': limit,
+    });
+    final data = response.data;
+    final files = (data['files'] as List?)
+            ?.map((f) => FileItem.fromJson(f as Map<String, dynamic>))
+            .toList() ??
+        [];
+    return FileListResult(
+      files: files,
+      totalCount: data['total_count'] as int,
+      offset: data['offset'] as int,
+      limit: data['limit'] as int,
+    );
+  }
+
+  /// Restore a file from archive to active files.
+  Future<void> restoreArchive(String key) async {
+    await _dio.post('/api/archive/restore', queryParameters: {'key': key});
+  }
+
+  /// Delete an archived file.
+  Future<void> deleteArchive(String key) async {
+    await _dio.delete('/api/archive', queryParameters: {'key': key});
+  }
+
+  /// Trigger archival scan manually.
+  Future<void> runArchival() async {
+    await _dio.post('/api/archive/run');
+  }
+
   // --- Stats API ---
 
   /// Get storage analytics for the current user.
