@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mime/mime.dart';
 
 import '../services/api_service.dart';
+import '../services/file_picker_service.dart' as picker;
 
 class UploadScreen extends StatefulWidget {
   final ApiService apiService;
@@ -21,17 +22,20 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _uploading = false;
 
   Future<void> _pickFiles() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.any,
-      withData: kIsWeb,
-    );
+    try {
+      final result = await picker.pickFiles(allowMultiple: true);
 
-    if (result != null) {
-      setState(() {
-        _selectedFiles = result.files;
-        _progress.clear();
-      });
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedFiles = result.files;
+          _progress.clear();
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to pick files: $e')),
+      );
     }
   }
 
@@ -105,36 +109,34 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Drop zone style button
-            GestureDetector(
-              onTap: _uploading ? null : _pickFiles,
-              child: Container(
-                height: 120,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: const Color(0xFFE0E0E0),
-                    width: 2,
+            // Drop zone style button — must use Material button for web
+            // file picker to work (browser requires trusted user gesture)
+            SizedBox(
+              height: 120,
+              child: OutlinedButton(
+                onPressed: _uploading ? null : _pickFiles,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFE0E0E0), width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.cloud_upload_outlined,
-                          size: 36, color: Colors.grey[400]),
-                      const SizedBox(height: 8),
-                      Text(
-                        'SELECT_FILES',
-                        style: GoogleFonts.spaceMono(
-                            fontSize: 12, color: Colors.grey),
-                      ),
-                      Text(
-                        '${_selectedFiles.length} selected',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                      ),
-                    ],
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_upload_outlined,
+                        size: 36, color: Colors.grey[400]),
+                    const SizedBox(height: 8),
+                    Text(
+                      'SELECT_FILES',
+                      style: GoogleFonts.spaceMono(
+                          fontSize: 12, color: Colors.grey),
+                    ),
+                    Text(
+                      '${_selectedFiles.length} selected',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                  ],
                 ),
               ),
             ),
