@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'config.dart';
-import 'screens/gallery_screen.dart';
+import 'screens/app_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
+import 'theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -21,10 +22,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Reliquary',
       navigatorKey: navigatorKey,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: ReliquaryTheme.light,
+      debugShowCheckedModeBanner: false,
       home: const AuthGate(),
     );
   }
@@ -67,7 +66,7 @@ class _AuthGateState extends State<AuthGate> {
     }
 
     if (_loggedIn) {
-      return GalleryScreen(authService: _authService);
+      return AppShell(authService: _authService);
     }
 
     return LoginScreen(authService: _authService);
