@@ -164,7 +164,9 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	presignedURL, err := h.store.PresignGet(r.Context(), key)
+	download := r.URL.Query().Get("download") == "true"
+
+	presignedURL, err := h.store.PresignGet(r.Context(), key, download)
 	if err != nil {
 		slog.Error("presign get failed", "key", key, "error", err)
 		httpError(w, "failed to generate download URL", http.StatusInternalServerError)

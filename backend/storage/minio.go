@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -45,8 +46,14 @@ func (c *Client) PresignPut(ctx context.Context, key, contentType string) (*url.
 	return c.mc.PresignedPutObject(ctx, c.bucket, key, 15*time.Minute)
 }
 
-func (c *Client) PresignGet(ctx context.Context, key string) (*url.URL, error) {
+func (c *Client) PresignGet(ctx context.Context, key string, forceDownload bool) (*url.URL, error) {
 	params := make(url.Values)
+	if forceDownload {
+		// Extract filename from key for the download name.
+		parts := strings.Split(key, "/")
+		filename := parts[len(parts)-1]
+		params.Set("response-content-disposition", "attachment; filename=\""+filename+"\"")
+	}
 	return c.mc.PresignedGetObject(ctx, c.bucket, key, 15*time.Minute, params)
 }
 
