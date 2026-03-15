@@ -90,6 +90,14 @@ class ApiService {
     return url;
   }
 
+  /// Get a presigned download URL with content-disposition: attachment.
+  /// Forces the browser to download instead of displaying inline.
+  Future<String> presignDownloadForSave(String key) async {
+    final response = await _dio.get('/api/files/presign',
+        queryParameters: {'key': key, 'download': 'true'});
+    return response.data['url'] as String;
+  }
+
   /// Delete a file from the archive.
   Future<void> deleteFile(String key) async {
     await _dio.delete('/api/files', queryParameters: {'key': key});

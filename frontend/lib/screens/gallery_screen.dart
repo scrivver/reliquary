@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../models/file_item.dart';
@@ -138,6 +139,64 @@ class _GalleryScreenState extends State<GalleryScreen> {
     }
   }
 
+  Future<void> _downloadFile(FileItem file) async {
+    try {
+      final url = await widget.apiService.presignDownloadForSave(file.key);
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to download file')),
+      );
+    }
+  }
+
+  void _showFileMenu(FileItem file) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(file.filename,
+                  style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w600)),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: Text('DETAILS', style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13, letterSpacing: 0.8)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showFileDetails(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.download),
+              title: Text('DOWNLOAD', style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13, letterSpacing: 0.8)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _downloadFile(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Color(0xFFEC3713)),
+              title: Text('DELETE', style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13, letterSpacing: 0.8, color: const Color(0xFFEC3713))),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteFile(file);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openFile(FileItem file) async {
     if (file.isImage) {
       _viewFullImage(file);
@@ -158,6 +217,23 @@ class _GalleryScreenState extends State<GalleryScreen> {
             backgroundColor: Colors.black,
             foregroundColor: Colors.white,
             title: Text(file.originalName ?? file.filename),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => _showFileDetails(file),
+                tooltip: 'DETAILS',
+              ),
+              IconButton(
+                icon: const Icon(Icons.download),
+                onPressed: () async {
+                  final downloadUrl =
+                      await widget.apiService.presignDownloadForSave(file.key);
+                  launchUrl(Uri.parse(downloadUrl),
+                      mode: LaunchMode.externalApplication);
+                },
+                tooltip: 'DOWNLOAD',
+              ),
+            ],
           ),
           body: Center(
             child: InteractiveViewer(
@@ -191,6 +267,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _downloadFile(file);
+            },
+            child: const Text('DOWNLOAD'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('CLOSE'),
@@ -346,7 +429,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               file: file,
               apiService: widget.apiService,
               onTap: () => _openFile(file),
-              onDelete: () => _deleteFile(file),
+              onLongPress: () => _showFileMenu(file),
             );
           },
         ),
@@ -365,13 +448,13 @@ class _FileTile extends StatefulWidget {
   final FileItem file;
   final ApiService apiService;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback onLongPress;
 
   const _FileTile({
     required this.file,
     required this.apiService,
     required this.onTap,
-    required this.onDelete,
+    required this.onLongPress,
   });
 
   @override
@@ -401,7 +484,7 @@ class _FileTileState extends State<_FileTile> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: widget.onTap,
-      onLongPress: widget.onDelete,
+      onLongPress: widget.onLongPress,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Container(
