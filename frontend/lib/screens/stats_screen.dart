@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
+
+const _kAccentRed = Color(0xFFEC3713);
 
 class StatsScreen extends StatefulWidget {
   final ApiService apiService;
@@ -38,22 +41,39 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Storage Analytics')),
+      appBar: AppBar(
+        title: Text(
+          'VAULT_STATUS',
+          style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _kAccentRed))
           : _error != null
               ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error!),
+                      Text(_error!, style: GoogleFonts.spaceMono()),
                       const SizedBox(height: 16),
                       FilledButton(
-                          onPressed: _loadStats, child: const Text('Retry')),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _kAccentRed,
+                        ),
+                        onPressed: _loadStats,
+                        child: Text('RETRY', style: GoogleFonts.spaceGrotesk(
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.0,
+                        )),
+                      ),
                     ],
                   ),
                 )
               : RefreshIndicator(
+                  color: _kAccentRed,
                   onRefresh: _loadStats,
                   child: _buildStats(),
                 ),
@@ -76,7 +96,7 @@ class _StatsScreenState extends State<StatsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         // Overview cards
-        _SectionTitle(title: 'Overview'),
+        _SectionTitle(title: 'OVERVIEW'),
         const SizedBox(height: 8),
         Wrap(
           spacing: 12,
@@ -84,19 +104,19 @@ class _StatsScreenState extends State<StatsScreen> {
           children: [
             _StatCard(
               icon: Icons.folder,
-              label: 'Active Files',
+              label: 'ACTIVE_FILES',
               value: '$fileCount',
               subtitle: _formatSize(totalSize),
             ),
             _StatCard(
               icon: Icons.archive,
-              label: 'Archived',
+              label: 'ARCHIVED',
               value: '$archiveCount',
               subtitle: _formatSize(archiveSize),
             ),
             _StatCard(
               icon: Icons.storage,
-              label: 'Total Storage',
+              label: 'TOTAL_STORAGE',
               value: _formatSize(totalSize + archiveSize),
               subtitle: '${fileCount + archiveCount} files',
             ),
@@ -106,7 +126,7 @@ class _StatsScreenState extends State<StatsScreen> {
         // By type
         if (byType.isNotEmpty) ...[
           const SizedBox(height: 24),
-          _SectionTitle(title: 'Files by Type'),
+          _SectionTitle(title: 'FILES_BY_TYPE'),
           const SizedBox(height: 8),
           ...byType.entries.map((e) => _TypeRow(
                 type: e.key,
@@ -118,7 +138,7 @@ class _StatsScreenState extends State<StatsScreen> {
         // By month
         if (sortedMonths.isNotEmpty) ...[
           const SizedBox(height: 24),
-          _SectionTitle(title: 'Uploads by Month'),
+          _SectionTitle(title: 'UPLOADS_BY_MONTH'),
           const SizedBox(height: 8),
           ...sortedMonths.map((month) => _MonthRow(
                 month: month,
@@ -145,7 +165,21 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(title, style: Theme.of(context).textTheme.titleMedium);
+    return Row(
+      children: [
+        Container(width: 3, height: 16, color: _kAccentRed),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -165,19 +199,45 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32, color: Theme.of(context).colorScheme.primary),
+            Icon(icon, size: 28, color: _kAccentRed),
             const SizedBox(height: 8),
-            Text(value,
-                style: Theme.of(context).textTheme.headlineSmall),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            )),
+            Text(
+              value,
+              style: GoogleFonts.spaceMono(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.spaceMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 1.0,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+            Text(
+              subtitle,
+              style: GoogleFonts.spaceMono(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
           ],
         ),
       ),
@@ -203,20 +263,31 @@ class _TypeRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(_iconForType(type), size: 20, color: Colors.grey),
+          Icon(_iconForType(type), size: 20, color: _kAccentRed.withValues(alpha: 0.7)),
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: Text(type),
+            child: Text(
+              type.toUpperCase(),
+              style: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 0.5),
+            ),
           ),
           Expanded(
             flex: 3,
-            child: LinearProgressIndicator(value: fraction),
+            child: LinearProgressIndicator(
+              value: fraction,
+              backgroundColor: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+              color: _kAccentRed,
+            ),
           ),
           const SizedBox(width: 8),
           SizedBox(
             width: 40,
-            child: Text('$count', textAlign: TextAlign.end),
+            child: Text(
+              '$count',
+              textAlign: TextAlign.end,
+              style: GoogleFonts.spaceMono(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -251,10 +322,22 @@ class _MonthRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          const Icon(Icons.calendar_month, size: 20, color: Colors.grey),
+          Icon(Icons.calendar_month, size: 20, color: _kAccentRed.withValues(alpha: 0.7)),
           const SizedBox(width: 8),
-          Expanded(child: Text(month)),
-          Text('$count files'),
+          Expanded(
+            child: Text(
+              month,
+              style: GoogleFonts.spaceMono(fontSize: 12),
+            ),
+          ),
+          Text(
+            '$count FILES',
+            style: GoogleFonts.spaceMono(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
         ],
       ),
     );

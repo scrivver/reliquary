@@ -1,27 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../main.dart';
 import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
-import 'admin_screen.dart';
-import 'archive_screen.dart';
 import 'login_screen.dart';
-import 'settings_screen.dart';
-import 'stats_screen.dart';
 import 'upload_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
   final AuthService authService;
+  final ApiService apiService;
 
-  const GalleryScreen({super.key, required this.authService});
+  const GalleryScreen({
+    super.key,
+    required this.authService,
+    required this.apiService,
+  });
 
   @override
   State<GalleryScreen> createState() => _GalleryScreenState();
 }
 
 class _GalleryScreenState extends State<GalleryScreen> {
-  late final ApiService _apiService;
   final List<FileItem> _files = [];
   bool _loading = true;
   bool _loadingMore = false;
@@ -29,30 +30,19 @@ class _GalleryScreenState extends State<GalleryScreen> {
   int _totalCount = 0;
   String? _error;
   String _username = '';
-  bool _isAdmin = false;
 
   static const _pageSize = 50;
 
   @override
   void initState() {
     super.initState();
-    _apiService = ApiService(
-      widget.authService,
-      onUnauthorized: _handleUnauthorized,
-    );
     _loadUserInfo();
     _loadFiles();
   }
 
   Future<void> _loadUserInfo() async {
     final username = await widget.authService.getUsername();
-    final isAdmin = await widget.authService.isAdmin();
-    if (mounted) {
-      setState(() {
-        _username = username ?? '';
-        _isAdmin = isAdmin;
-      });
-    }
+    if (mounted) setState(() => _username = username ?? '');
   }
 
   void _handleUnauthorized() {
@@ -74,7 +64,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
     });
 
     try {
-      final result = await _apiService.listFiles(offset: 0, limit: _pageSize);
+      final result =
+          await widget.apiService.listFiles(offset: 0, limit: _pageSize);
       if (!mounted) return;
       setState(() {
         _files
@@ -95,11 +86,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
-
     setState(() => _loadingMore = true);
 
     try {
-      final result = await _apiService.listFiles(
+      final result = await widget.apiService.listFiles(
         offset: _files.length,
         limit: _pageSize,
       );
@@ -120,25 +110,25 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete File'),
-        content: Text('Delete "${file.filename}" from archive?'),
+        title: const Text('DELETE FILE'),
+        content: Text('Permanently remove "${file.filename}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text('CANCEL'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('DELETE',
+                style: TextStyle(color: Color(0xFFEC3713))),
           ),
         ],
       ),
     );
-
     if (confirm != true) return;
 
     try {
-      await _apiService.deleteFile(file.key);
+      await widget.apiService.deleteFile(file.key);
       _loadFiles();
     } catch (e) {
       if (!mounted) return;
@@ -158,12 +148,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _viewFullImage(FileItem file) async {
     try {
-      final url = await _apiService.presignDownload(file.key);
+      final url = await widget.apiService.presignDownload(file.key);
       if (!mounted) return;
 
       Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: Text(file.filename)),
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: Text(file.originalName ?? file.filename),
+          ),
           body: Center(
             child: InteractiveViewer(
               child: Image.network(url),
@@ -188,21 +183,36 @@ class _GalleryScreenState extends State<GalleryScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Type: ${file.contentType}'),
-            Text('Size: ${_formatSize(file.size)}'),
-            if (file.uploadDate != null)
-              Text('Uploaded: ${file.uploadDate}'),
+            _detailRow('TYPE', file.contentType),
+            _detailRow('SIZE', _formatSize(file.size)),
+            if (file.uploadDate != null) _detailRow('UPLOADED', file.uploadDate!),
             if (file.checksum != null)
-              Text('SHA-256: ${file.checksum!.substring(0, 16)}...'),
-            if (file.originalName != null && file.originalName != file.filename)
-              Text('Stored as: ${file.filename}'),
+              _detailRow('SHA-256', '${file.checksum!.substring(0, 16)}...'),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+            child: const Text('CLOSE'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label,
+                style: GoogleFonts.spaceMono(
+                    fontSize: 10, color: Colors.grey, letterSpacing: 0.5)),
+          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
         ],
       ),
     );
@@ -210,86 +220,66 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _logout() async {
     await widget.authService.logout();
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => LoginScreen(authService: widget.authService),
-      ),
-    );
+    _handleUnauthorized();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_totalCount > 0
-            ? '$_username ($_totalCount files)'
-            : _username.isNotEmpty ? _username : 'Reliquary'),
+        title: Row(
+          children: [
+            Text('FILES_ROOT',
+                style: GoogleFonts.spaceMono(
+                    fontSize: 14, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEC3713).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _username.toUpperCase(),
+                style: GoogleFonts.spaceMono(
+                  fontSize: 10,
+                  color: const Color(0xFFEC3713),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
-          if (_isAdmin)
-            IconButton(
-              icon: const Icon(Icons.admin_panel_settings),
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => AdminScreen(apiService: _apiService),
-                  ),
-                );
-              },
-              tooltip: 'User Management',
+          if (_totalCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Text(
+                  '$_totalCount ITEMS',
+                  style: GoogleFonts.spaceMono(
+                      fontSize: 10, color: Colors.grey),
+                ),
+              ),
             ),
           IconButton(
-            icon: const Icon(Icons.archive),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ArchiveScreen(apiService: _apiService),
-                ),
-              );
-            },
-            tooltip: 'Archive',
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => StatsScreen(apiService: _apiService),
-                ),
-              );
-            },
-            tooltip: 'Analytics',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SettingsScreen(
-                    apiService: _apiService,
-                    authService: widget.authService,
-                  ),
-                ),
-              );
-            },
-            tooltip: 'Settings',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, size: 20),
             onPressed: _logout,
-            tooltip: 'Logout',
+            tooltip: 'LOGOUT',
           ),
         ],
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFFEC3713),
+        foregroundColor: Colors.white,
         onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => UploadScreen(apiService: _apiService),
+            builder: (_) => UploadScreen(apiService: widget.apiService),
           ));
           _loadFiles();
         },
-        child: const Icon(Icons.upload),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -306,15 +296,26 @@ class _GalleryScreenState extends State<GalleryScreen> {
           children: [
             Text(_error!),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _loadFiles, child: const Text('Retry')),
+            FilledButton(onPressed: _loadFiles, child: const Text('RETRY')),
           ],
         ),
       );
     }
 
     if (_files.isEmpty) {
-      return const Center(
-        child: Text('No files yet. Tap + to upload.'),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_open, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text('VAULT_EMPTY',
+                style: GoogleFonts.spaceMono(color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text('Tap + to deposit artifacts',
+                style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+          ],
+        ),
       );
     }
 
@@ -343,7 +344,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
             final file = _files[index];
             return _FileTile(
               file: file,
-              apiService: _apiService,
+              apiService: widget.apiService,
               onTap: () => _openFile(file),
               onDelete: () => _deleteFile(file),
             );
@@ -393,9 +394,7 @@ class _FileTileState extends State<_FileTile> {
       final url =
           await widget.apiService.presignDownload(widget.file.thumbnailKey!);
       if (mounted) setState(() => _thumbUrl = url);
-    } catch (_) {
-      // Thumbnail may not exist yet; ignore.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -406,7 +405,11 @@ class _FileTileState extends State<_FileTile> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          color: Colors.grey[200],
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F5F5),
+            border: Border.all(color: const Color(0xFFE0E0E0)),
+            borderRadius: BorderRadius.circular(8),
+          ),
           child: _thumbUrl != null
               ? Image.network(
                   _thumbUrl!,
@@ -426,15 +429,15 @@ class _FileTileState extends State<_FileTile> {
         children: [
           Icon(
             _iconForContentType(widget.file.contentType),
-            size: 40,
-            color: Colors.grey,
+            size: 32,
+            color: Colors.grey[400],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               widget.file.filename,
-              style: const TextStyle(fontSize: 10),
+              style: GoogleFonts.spaceMono(fontSize: 9, color: Colors.grey),
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
               textAlign: TextAlign.center,

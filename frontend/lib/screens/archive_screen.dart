@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../models/file_item.dart';
 import '../services/api_service.dart';
+
+const _kAccentRed = Color(0xFFEC3713);
 
 class ArchiveScreen extends StatefulWidget {
   final ApiService apiService;
@@ -81,16 +84,29 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Restore File'),
-        content: Text('Restore "${file.filename}" to active files?'),
+        title: Text('RESTORE_FILE', style: GoogleFonts.spaceGrotesk(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+        )),
+        content: Text(
+          'Restore "${file.filename}" to active files?',
+          style: GoogleFonts.spaceMono(fontSize: 13),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            )),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Restore'),
+            child: Text('RESTORE', style: GoogleFonts.spaceGrotesk(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            )),
           ),
         ],
       ),
@@ -102,12 +118,12 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
       _loadFiles();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('File restored')),
+        SnackBar(content: Text('File restored', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to restore: $e')),
+        SnackBar(content: Text('Failed to restore: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -116,17 +132,29 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Permanently'),
+        title: Text('DELETE_PERMANENT', style: GoogleFonts.spaceGrotesk(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+        )),
         content: Text(
-            'Permanently delete "${file.filename}"? This cannot be undone.'),
+          'Permanently delete "${file.filename}"? This cannot be undone.',
+          style: GoogleFonts.spaceMono(fontSize: 13),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            )),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('DELETE', style: GoogleFonts.spaceGrotesk(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              color: _kAccentRed,
+            )),
           ),
         ],
       ),
@@ -139,7 +167,7 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete: $e')),
+        SnackBar(content: Text('Failed to delete: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -149,14 +177,14 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
       await widget.apiService.runArchival();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Archival scan started')),
+        SnackBar(content: Text('Archival scan started', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
       // Reload after a short delay to show new results.
       Future.delayed(const Duration(seconds: 2), _loadFiles);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to start archival: $e')),
+        SnackBar(content: Text('Failed to start archival: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -165,14 +193,20 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_totalCount > 0
-            ? 'Archive ($_totalCount files)'
-            : 'Archive'),
+        title: Text(
+          _totalCount > 0
+              ? 'ARCHIVE_BROWSER ($_totalCount)'
+              : 'ARCHIVE_BROWSER',
+          style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.play_arrow),
+            icon: const Icon(Icons.play_arrow, color: _kAccentRed),
             onPressed: _runArchival,
-            tooltip: 'Run Archival Now',
+            tooltip: 'RUN_ARCHIVAL_NOW',
           ),
         ],
       ),
@@ -182,7 +216,7 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _kAccentRed));
     }
 
     if (_error != null) {
@@ -190,21 +224,36 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!),
+            Text(_error!, style: GoogleFonts.spaceMono()),
             const SizedBox(height: 16),
-            FilledButton(onPressed: _loadFiles, child: const Text('Retry')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
+              onPressed: _loadFiles,
+              child: Text('RETRY', style: GoogleFonts.spaceGrotesk(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.0,
+              )),
+            ),
           ],
         ),
       );
     }
 
     if (_files.isEmpty) {
-      return const Center(
-        child: Text('No archived files.'),
+      return Center(
+        child: Text(
+          'NO_ARCHIVED_FILES',
+          style: GoogleFonts.spaceMono(
+            fontSize: 13,
+            letterSpacing: 1.0,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
       );
     }
 
     return RefreshIndicator(
+      color: _kAccentRed,
       onRefresh: _loadFiles,
       child: NotificationListener<ScrollNotification>(
         onNotification: (notification) {
@@ -221,31 +270,58 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
               return const Center(
                   child: Padding(
                 padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
+                child: CircularProgressIndicator(color: _kAccentRed),
               ));
             }
             final file = _files[index];
-            return ListTile(
-              leading: Icon(_iconForContentType(file.contentType)),
-              title: Text(file.filename),
-              subtitle: Text(
-                  '${_formatSize(file.size)} - ${file.lastModified.toLocal().toString().split('.').first}'),
-              trailing: PopupMenuButton<String>(
-                onSelected: (action) {
-                  if (action == 'restore') _restoreFile(file);
-                  if (action == 'delete') _deleteFile(file);
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'restore',
-                    child: Text('Restore'),
+            return Card(
+              elevation: 0,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: ListTile(
+                leading: Icon(
+                  _iconForContentType(file.contentType),
+                  color: _kAccentRed.withValues(alpha: 0.7),
+                ),
+                title: Text(
+                  file.filename,
+                  style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '${_formatSize(file.size)} // ${file.lastModified.toLocal().toString().split('.').first}',
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child:
-                        Text('Delete', style: TextStyle(color: Colors.red)),
-                  ),
-                ],
+                ),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (action) {
+                    if (action == 'restore') _restoreFile(file);
+                    if (action == 'delete') _deleteFile(file);
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'restore',
+                      child: Text('RESTORE', style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
+                      )),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('DELETE', style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
+                        color: _kAccentRed,
+                      )),
+                    ),
+                  ],
+                ),
               ),
             );
           },

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
+
+const _kAccentRed = Color(0xFFEC3713);
 
 class AdminScreen extends StatefulWidget {
   final ApiService apiService;
@@ -48,7 +51,7 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create user: $e')),
+        SnackBar(content: Text('Failed to create user: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -57,16 +60,29 @@ class _AdminScreenState extends State<AdminScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Delete user "$username"? Their files will remain.'),
+        title: Text('DELETE_USER', style: GoogleFonts.spaceGrotesk(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+        )),
+        content: Text(
+          'Delete user "$username"? Their files will remain.',
+          style: GoogleFonts.spaceMono(fontSize: 13),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            )),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text('DELETE', style: GoogleFonts.spaceGrotesk(
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              color: _kAccentRed,
+            )),
           ),
         ],
       ),
@@ -79,7 +95,7 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete user: $e')),
+        SnackBar(content: Text('Failed to delete user: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -95,12 +111,12 @@ class _AdminScreenState extends State<AdminScreen> {
       await widget.apiService.changePassword(username, password);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed')),
+        SnackBar(content: Text('Password changed', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to change password: $e')),
+        SnackBar(content: Text('Failed to change password: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -108,46 +124,86 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('User Management')),
+      appBar: AppBar(
+        title: Text(
+          'USER_MANAGEMENT',
+          style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: _kAccentRed))
           : ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: _users.length,
               itemBuilder: (context, index) {
                 final user = _users[index];
                 final username = user['username'] as String;
                 final role = user['role'] as String;
-                return ListTile(
-                  leading: Icon(
-                    role == 'admin'
-                        ? Icons.admin_panel_settings
-                        : Icons.person,
+                return Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
-                  title: Text(username),
-                  subtitle: Text(role),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (action) {
-                      if (action == 'password') _changePassword(username);
-                      if (action == 'delete') _deleteUser(username);
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(
-                        value: 'password',
-                        child: Text('Change Password'),
+                  child: ListTile(
+                    leading: Icon(
+                      role == 'admin'
+                          ? Icons.admin_panel_settings
+                          : Icons.person,
+                      color: role == 'admin' ? _kAccentRed : null,
+                    ),
+                    title: Text(
+                      username,
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete',
-                            style: TextStyle(color: Colors.red)),
+                    ),
+                    subtitle: Text(
+                      'ROLE: ${role.toUpperCase()}',
+                      style: GoogleFonts.spaceMono(
+                        fontSize: 11,
+                        letterSpacing: 0.8,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
-                    ],
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (action) {
+                        if (action == 'password') _changePassword(username);
+                        if (action == 'delete') _deleteUser(username);
+                      },
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: 'password',
+                          child: Text('CHANGE_PASSWORD', style: GoogleFonts.spaceGrotesk(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8,
+                          )),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('DELETE', style: GoogleFonts.spaceGrotesk(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8,
+                            color: _kAccentRed,
+                          )),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
             ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: _kAccentRed,
         onPressed: _createUser,
-        child: const Icon(Icons.person_add),
+        child: const Icon(Icons.person_add, color: Colors.white),
       ),
     );
   }
@@ -186,36 +242,59 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Create User'),
+      title: Text('CREATE_USER', style: GoogleFonts.spaceGrotesk(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.0,
+      )),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _usernameController,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              border: OutlineInputBorder(),
+            style: GoogleFonts.spaceMono(fontSize: 14),
+            decoration: InputDecoration(
+              labelText: 'USERNAME',
+              labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+              border: const OutlineInputBorder(),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: _kAccentRed),
+              ),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _passwordController,
-            decoration: const InputDecoration(
-              labelText: 'Password',
-              border: OutlineInputBorder(),
+            style: GoogleFonts.spaceMono(fontSize: 14),
+            decoration: InputDecoration(
+              labelText: 'PASSWORD',
+              labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+              border: const OutlineInputBorder(),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: _kAccentRed),
+              ),
             ),
             obscureText: true,
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _role,
-            decoration: const InputDecoration(
-              labelText: 'Role',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: 'ROLE',
+              labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+              border: const OutlineInputBorder(),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: _kAccentRed),
+              ),
             ),
-            items: const [
-              DropdownMenuItem(value: 'user', child: Text('User')),
-              DropdownMenuItem(value: 'admin', child: Text('Admin')),
+            items: [
+              DropdownMenuItem(
+                value: 'user',
+                child: Text('USER', style: GoogleFonts.spaceMono(fontSize: 14)),
+              ),
+              DropdownMenuItem(
+                value: 'admin',
+                child: Text('ADMIN', style: GoogleFonts.spaceMono(fontSize: 14)),
+              ),
             ],
             onChanged: (v) => setState(() => _role = v ?? 'user'),
           ),
@@ -224,9 +303,13 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          )),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
           onPressed: () {
             if (_usernameController.text.isEmpty ||
                 _passwordController.text.isEmpty) {
@@ -241,7 +324,10 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
               ),
             );
           },
-          child: const Text('Create'),
+          child: Text('CREATE', style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          )),
         ),
       ],
     );
@@ -268,12 +354,23 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Change Password: ${widget.username}'),
+      title: Text(
+        'CHANGE_PASSWORD: ${widget.username}',
+        style: GoogleFonts.spaceGrotesk(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+        ),
+      ),
       content: TextField(
         controller: _controller,
-        decoration: const InputDecoration(
-          labelText: 'New Password',
-          border: OutlineInputBorder(),
+        style: GoogleFonts.spaceMono(fontSize: 14),
+        decoration: InputDecoration(
+          labelText: 'NEW_PASSWORD',
+          labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+          border: const OutlineInputBorder(),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: _kAccentRed),
+          ),
         ),
         obscureText: true,
         autofocus: true,
@@ -281,14 +378,21 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          )),
         ),
         FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
           onPressed: () {
             if (_controller.text.isEmpty) return;
             Navigator.pop(context, _controller.text);
           },
-          child: const Text('Change'),
+          child: Text('CHANGE', style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          )),
         ),
       ],
     );

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
-import 'gallery_screen.dart';
+import 'app_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   final AuthService authService;
@@ -34,13 +35,13 @@ class _LoginScreenState extends State<LoginScreen> {
     if (success) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => GalleryScreen(authService: widget.authService),
+          builder: (_) => AppShell(authService: widget.authService),
         ),
       );
     } else {
       setState(() {
         _loading = false;
-        _error = 'Invalid username or password';
+        _error = 'ACCESS_DENIED: Invalid credentials';
       });
     }
   }
@@ -55,27 +56,61 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reliquary')),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
+          constraints: const BoxConstraints(maxWidth: 380),
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Logo
+                Center(
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEC3713),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'R',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 28,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 Text(
-                  'Sign In',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  'RELIQUARY',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 4,
+                  ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 4),
+                Text(
+                  'VAULT_ACCESS_PROTOCOL',
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 10,
+                    color: Colors.grey,
+                    letterSpacing: 2,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
                 TextField(
                   controller: _usernameController,
                   decoration: const InputDecoration(
-                    labelText: 'Username',
-                    border: OutlineInputBorder(),
+                    labelText: 'IDENTIFIER',
                   ),
                   textInputAction: TextInputAction.next,
                 ),
@@ -83,8 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _passwordController,
                   decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
+                    labelText: 'ACCESS_KEY',
                   ),
                   obscureText: true,
                   textInputAction: TextInputAction.done,
@@ -92,18 +126,32 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEC3713).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(_error!,
+                        style: GoogleFonts.spaceMono(
+                            fontSize: 11, color: const Color(0xFFEC3713))),
+                  ),
                 ],
                 const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _loading ? null : _login,
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Login'),
+                SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: _loading ? null : _login,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('AUTHENTICATE'),
+                  ),
                 ),
               ],
             ),

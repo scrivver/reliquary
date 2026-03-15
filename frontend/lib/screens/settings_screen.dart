@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../config.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+
+const _kAccentRed = Color(0xFFEC3713);
 
 class SettingsScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -48,8 +51,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Server URL saved. Restart the app to apply.')),
+      SnackBar(
+          content: Text('Server URL saved. Restart the app to apply.',
+              style: GoogleFonts.spaceMono(fontSize: 13))),
     );
   }
 
@@ -59,8 +63,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlController.text = AppConfig.defaultApiBaseUrl;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Reset to default. Restart the app to apply.')),
+      SnackBar(
+          content: Text('Reset to default. Restart the app to apply.',
+              style: GoogleFonts.spaceMono(fontSize: 13))),
     );
   }
 
@@ -74,12 +79,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       _newPasswordController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed successfully')),
+        SnackBar(content: Text('Password changed successfully',
+            style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to change password: $e')),
+        SnackBar(content: Text('Failed to change password: $e',
+            style: GoogleFonts.spaceMono(fontSize: 13))),
       );
     }
   }
@@ -87,19 +94,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: Text(
+          'SYSTEM_CONFIG',
+          style: GoogleFonts.spaceGrotesk(
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           // Server URL section
-          Text('Server URL',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          _buildSectionHeader('SERVER_URL'),
+          const SizedBox(height: 12),
           TextField(
             controller: _urlController,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
+            style: GoogleFonts.spaceMono(fontSize: 14),
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              focusedBorder: const OutlineInputBorder(
+                borderSide: BorderSide(color: _kAccentRed),
+              ),
               hintText: 'http://192.168.1.100:2080',
+              hintStyle: GoogleFonts.spaceMono(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+              ),
             ),
             keyboardType: TextInputType.url,
             onSubmitted: (_) => _save(),
@@ -109,14 +131,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               Expanded(
                 child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
                   onPressed: _save,
-                  child: const Text('Save'),
+                  child: Text('SAVE', style: GoogleFonts.spaceGrotesk(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.0,
+                  )),
                 ),
               ),
               const SizedBox(width: 8),
               OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _kAccentRed),
+                  foregroundColor: _kAccentRed,
+                ),
                 onPressed: _reset,
-                child: const Text('Reset to Default'),
+                child: Text('RESET_DEFAULT', style: GoogleFonts.spaceGrotesk(
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
+                )),
               ),
             ],
           ),
@@ -124,34 +157,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(
             'Change the server URL to connect to a different Reliquary instance '
             '(e.g., a portable drive on your local network).',
-            style: Theme.of(context).textTheme.bodySmall,
+            style: GoogleFonts.spaceMono(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
           ),
 
           // Change password section
           if (_username != null && widget.apiService != null) ...[
             const SizedBox(height: 32),
-            const Divider(),
+            Divider(color: Theme.of(context).colorScheme.outlineVariant),
             const SizedBox(height: 16),
-            Text('Change Password',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            _buildSectionHeader('CHANGE_PASSWORD'),
+            const SizedBox(height: 12),
             TextField(
               controller: _newPasswordController,
-              decoration: const InputDecoration(
-                labelText: 'New Password',
-                border: OutlineInputBorder(),
+              style: GoogleFonts.spaceMono(fontSize: 14),
+              decoration: InputDecoration(
+                labelText: 'NEW_PASSWORD',
+                labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+                border: const OutlineInputBorder(),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: _kAccentRed),
+                ),
               ),
               obscureText: true,
               onSubmitted: (_) => _changePassword(),
             ),
             const SizedBox(height: 16),
             FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
               onPressed: _changePassword,
-              child: const Text('Change Password'),
+              child: Text('CHANGE_PASSWORD', style: GoogleFonts.spaceGrotesk(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.0,
+              )),
             ),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Row(
+      children: [
+        Container(width: 3, height: 16, color: _kAccentRed),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
     );
   }
 }
