@@ -62,7 +62,7 @@ class _UploadScreenState extends State<UploadScreen> {
           bytes = await file.xFile.readAsBytes();
         }
 
-        await widget.apiService.uploadFile(
+        final result = await widget.apiService.uploadFile(
           filename,
           bytes,
           contentType,
@@ -79,8 +79,11 @@ class _UploadScreenState extends State<UploadScreen> {
         );
 
         setState(() {
-          _progress[filename] =
-              _UploadProgress(status: 'PRESERVED', fraction: 1.0, done: true);
+          _progress[filename] = _UploadProgress(
+            status: result.duplicate ? 'DUPLICATE_SKIPPED' : 'PRESERVED',
+            fraction: 1.0,
+            done: true,
+          );
         });
       } catch (e) {
         setState(() {

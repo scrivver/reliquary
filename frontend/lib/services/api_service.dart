@@ -34,7 +34,8 @@ class ApiService {
   }
 
   /// Upload a file through the Go backend (multipart).
-  Future<String> uploadFile(
+  /// Returns the key and whether it was a duplicate.
+  Future<({String key, bool duplicate})> uploadFile(
     String filename,
     List<int> bytes,
     String contentType, {
@@ -52,7 +53,10 @@ class ApiService {
       onSendProgress: onProgress,
     );
 
-    return response.data['key'] as String;
+    return (
+      key: response.data['key'] as String,
+      duplicate: response.data['duplicate'] == true,
+    );
   }
 
   /// List files with pagination.
