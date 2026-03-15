@@ -90,10 +90,17 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/octet-stream"
 	}
 
+	// Optional relative path for folder uploads (e.g., "Photos/Vacation/img.jpg").
+	relativePath := r.FormValue("path")
+	storedName := filename
+	if relativePath != "" {
+		storedName = sanitizePath(relativePath)
+	}
+
 	now := time.Now()
-	baseName := strings.TrimSuffix(filename, path.Ext(filename))
-	ext := path.Ext(filename)
-	fileKey := fmt.Sprintf("%s/files/%d/%02d/%s", username, now.Year(), now.Month(), filename)
+	baseName := strings.TrimSuffix(storedName, path.Ext(storedName))
+	ext := path.Ext(storedName)
+	fileKey := fmt.Sprintf("%s/files/%d/%02d/%s", username, now.Year(), now.Month(), storedName)
 
 	// Avoid overwriting existing files by appending a suffix.
 	for i := 1; ; i++ {
@@ -514,6 +521,19 @@ func (h *Handler) listObjectsWithPagination(w http.ResponseWriter, r *http.Reque
 
 func sanitizeFilename(name string) string {
 	return path.Base(name)
+}
+
+// sanitizePath cleans a relative path for safe storage.
+// Prevents directory traversal and removes leading slashes.
+func sanitizePath(p string) string {
+	// Clean the path to resolve .. and .
+	cleaned := path.Clean(p)
+	// Remove leading slashes and dots
+	cleaned = strings.TrimLeft(cleaned, "/.")
+	if cleaned == "" {
+		return "unnamed"
+	}
+	return cleaned
 }
 
 func jsonResponse(w http.ResponseWriter, data any) {
