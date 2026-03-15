@@ -284,3 +284,88 @@ flutter build ipa --release
 ```
 
 Set the server URL on the login screen to point to your deployment (e.g., `http://192.168.1.100:2080`).
+
+### Manual Setup (without Nix or containers)
+
+If you prefer to set up each component manually:
+
+#### Prerequisites
+
+- [Go](https://go.dev/) 1.22+
+- [Flutter](https://flutter.dev/) 3.x
+- [MinIO](https://min.io/) server and client (`mc`)
+- [Caddy](https://caddyserver.com/) 2.x
+- [ffmpeg](https://ffmpeg.org/) (optional, for video thumbnails)
+
+#### 1. Start MinIO
+
+```bash
+# Start MinIO (adjust paths as needed)
+mkdir -p /var/data/minio
+MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
+  minio server /var/data/minio --address "127.0.0.1:9000"
+
+# Create the bucket
+mc alias set local http://127.0.0.1:9000 minioadmin minioadmin --api S3v4
+mc mb --ignore-existing local/reliquary
+mc anonymous set download local/reliquary
+```
+
+#### 2. Build and run the Go backend
+
+```bash
+cd backend
+go build -o reliquary-be .
+
+MINIO_PORT=9000 \
+LISTEN_ADDR=/tmp/reliquary-backend.sock \
+JWT_SECRET=your-secret-here \
+AUTH_USERNAME=admin \
+AUTH_PASSWORD=your-password \
+  ./reliquary-be
+```
+
+#### 3. Build Flutter web
+
+```bash
+cd frontend
+flutter build web --release
+```
+
+#### 4. Configure and run Caddy
+
+Create a `Caddyfile`:
+
+```caddyfile
+:2080 {
+  handle /api/* {
+    reverse_proxy unix//tmp/reliquary-backend.sock
+  }
+
+  handle /storage/* {
+    uri strip_prefix /storage
+    reverse_proxy 127.0.0.1:9000 {
+      header_up Host 127.0.0.1:9000
+      header_down -Access-Control-Allow-Origin
+      header_down -Access-Control-Allow-Methods
+      header_down -Access-Control-Allow-Headers
+    }
+  }
+
+  handle {
+    root * frontend/build/web
+    file_server
+    try_files {path} /index.html
+  }
+}
+```
+
+```bash
+caddy run --config Caddyfile
+```
+
+The application is available at `http://localhost:2080`.
+
+#### Environment Variables
+
+See the [Configuration](#configuration) section above for all available options.
