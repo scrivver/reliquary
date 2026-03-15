@@ -49,7 +49,7 @@ func Load() (*Config, error) {
 		MinIOEndpoint:  envOr("MINIO_ENDPOINT", "127.0.0.1:"+minioPort),
 		MinIOAccessKey: envOr("MINIO_ACCESS_KEY", "minioadmin"),
 		MinIOSecretKey: envOr("MINIO_SECRET_KEY", "minioadmin"),
-		MinIOBucket:    envOr("MINIO_BUCKET", "smartaffiliate"),
+		MinIOBucket:    envOr("MINIO_BUCKET", "reliquary"),
 		MinIOUseSSL:    strings.ToLower(envOr("MINIO_USE_SSL", "false")) == "true",
 		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
 		Username:       envOr("AUTH_USERNAME", "admin"),

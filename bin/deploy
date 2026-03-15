@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+echo "=== Building Reliquary ==="
+
+# 1. Build Flutter web
+echo "Building Flutter web..."
+cd "$PROJECT_ROOT/frontend"
+flutter build web --release
+echo "Flutter web build complete."
+
+# 2. Build container image with Nix
+echo "Building container image..."
+cd "$PROJECT_ROOT"
+nix build .#container
+echo "Container image built."
+
+# 3. Load the image into Docker
+echo "Loading image into Docker..."
+docker load < result
+echo "Image loaded."
+
+# 4. Copy Flutter web build into the volume
+echo "Copying Flutter web build..."
+CONTAINER_ID=$(docker create reliquary:latest)
+docker cp "$PROJECT_ROOT/frontend/build/web/." "$CONTAINER_ID:/srv/web/"
+docker commit "$CONTAINER_ID" reliquary:latest
+docker rm "$CONTAINER_ID"
+echo "Web build copied into image."
+
+echo ""
+echo "=== Ready to deploy ==="
+echo ""
+echo "  cp .env.example .env"
+echo "  # Edit .env with your production values"
+echo "  docker compose up -d"
+echo ""

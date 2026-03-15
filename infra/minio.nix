@@ -1,4 +1,4 @@
-{ pkgs, bucketName ? "smartaffiliate" }:
+{ pkgs, bucketName ? "reliquary" }:
 {
   processes = {
     minio = {

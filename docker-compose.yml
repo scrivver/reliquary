@@ -1,0 +1,53 @@
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin} --api S3v4;
+      mc mb --ignore-existing local/$${MINIO_BUCKET:-smartaffiliate};
+      mc anonymous set download local/$${MINIO_BUCKET:-smartaffiliate};
+      exit 0;
+      "
+
+  reliquary:
+    image: reliquary:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    ports:
+      - "${RELIQUARY_PORT:-2080}:2080"
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-smartaffiliate}
+      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-admin}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      THUMBNAIL_WORKERS: ${THUMBNAIL_WORKERS:-4}
+      ARCHIVE_AFTER_DAYS: ${ARCHIVE_AFTER_DAYS:-90}
+      ARCHIVE_CHECK_HOURS: ${ARCHIVE_CHECK_HOURS:-24}
+    volumes:
+      - web_build:/srv/web
+
+volumes:
+  minio_data:
+  web_build:

@@ -16,7 +16,7 @@ Technical decisions as of 2026-03-15:
 - **Lifecycle archival**: Files older than ARCHIVE_AFTER_DAYS (default 90) auto-moved to archive prefix
 - **No external database**: All state in MinIO (user store, checksum indexes, file metadata as object metadata)
 - **Reverse proxy**: Caddy at port 2080, single origin for frontend/backend/MinIO
-- **MinIO credentials**: `minioadmin/minioadmin`, bucket `smartaffiliate`
+- **MinIO credentials**: `minioadmin/minioadmin`, bucket `reliquary`
 
 **Why:** Keep infrastructure minimal (just MinIO) while supporting multi-user, dedup, and archival.
 **How to apply:** All persistent state lives in MinIO. No SQLite or external DB unless query complexity demands it.

@@ -131,5 +131,5 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Bounded thumbnail generation**: Worker pool with configurable concurrency (default 4). Jobs queued in a channel (buffer 100) with backpressure. Supports image resize and ffmpeg video frame extraction.
 - **Ephemeral ports**: MinIO binds to random available ports to avoid conflicts. Other services discover ports by reading the port files.
 - **Nix store paths in process-compose**: Commands in `minio.nix` use `pkgs.writeShellScript`, so the generated YAML references `/nix/store/...` paths directly. The YAML is only valid inside the dev shell.
-- **MinIO credentials**: Default dev credentials are `minioadmin/minioadmin`. Default bucket is `smartaffiliate`.
+- **MinIO credentials**: Default dev credentials are `minioadmin/minioadmin`. Default bucket is `reliquary`.
 - **Layered dev shells**: Each shell (`infra`, `backend`, `frontend`) composes via `inputsFrom`, so every shell includes infra tooling. The default `full` shell combines backend and frontend.
