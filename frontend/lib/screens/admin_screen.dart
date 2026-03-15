@@ -201,6 +201,7 @@ class _AdminScreenState extends State<AdminScreen> {
               },
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'add_user_fab',
         backgroundColor: _kAccentRed,
         onPressed: _createUser,
         child: const Icon(Icons.person_add, color: Colors.white),

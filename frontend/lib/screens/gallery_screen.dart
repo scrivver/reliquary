@@ -354,6 +354,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       ),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'upload_fab',
         backgroundColor: const Color(0xFFEC3713),
         foregroundColor: Colors.white,
         onPressed: () async {
