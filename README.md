@@ -174,7 +174,27 @@ Features:
 
 ## Deployment
 
-### Build
+### Quick Deploy (prebuilt image)
+
+Download the latest prebuilt image from [GitHub Releases](https://github.com/chunhou/vault/releases) and run:
+
+```bash
+# Load the image
+docker load < reliquary-full.tar.gz
+# or: podman load < reliquary-full.tar.gz
+
+# Configure
+cp .env.example .env
+# Edit .env with your production values (especially JWT_SECRET and passwords)
+
+# Run
+docker compose up -d
+# or: podman compose up -d
+```
+
+The application is available at `http://localhost:2080`. Default credentials: `admin` / `admin`.
+
+### Build from Source
 
 Requires [Nix](https://nixos.org/) with flakes enabled and [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/).
 
