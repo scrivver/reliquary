@@ -55,42 +55,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showServerConfig() {
-    final controller = TextEditingController(text: AppConfig.apiBaseUrl);
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('SERVER_ENDPOINT', style: GoogleFonts.spaceGrotesk(
-          fontWeight: FontWeight.w700, letterSpacing: 1.0,
-        )),
-        content: TextField(
-          controller: controller,
-          style: GoogleFonts.spaceMono(fontSize: 13),
-          decoration: InputDecoration(
-            hintText: 'http://192.168.1.100:2080',
-            hintStyle: GoogleFonts.spaceMono(fontSize: 13, color: Colors.grey[400]),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await AppConfig.resetApiBaseUrl();
-              controller.text = AppConfig.defaultApiBaseUrl;
-            },
-            child: const Text('RESET'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                await AppConfig.setApiBaseUrl(url);
-              }
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('SAVE'),
-          ),
-        ],
-      ),
-    ).then((_) => controller.dispose());
+      builder: (_) => const _ServerConfigDialog(),
+    );
   }
 
   @override
@@ -208,6 +176,65 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ServerConfigDialog extends StatefulWidget {
+  const _ServerConfigDialog();
+
+  @override
+  State<_ServerConfigDialog> createState() => _ServerConfigDialogState();
+}
+
+class _ServerConfigDialogState extends State<_ServerConfigDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: AppConfig.apiBaseUrl);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('SERVER_ENDPOINT', style: GoogleFonts.spaceGrotesk(
+        fontWeight: FontWeight.w700, letterSpacing: 1.0,
+      )),
+      content: TextField(
+        controller: _controller,
+        style: GoogleFonts.spaceMono(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'http://192.168.1.100:2080',
+          hintStyle: GoogleFonts.spaceMono(fontSize: 13, color: Colors.grey[400]),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            await AppConfig.resetApiBaseUrl();
+            _controller.text = AppConfig.defaultApiBaseUrl;
+          },
+          child: const Text('RESET'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final url = _controller.text.trim();
+            if (url.isNotEmpty) {
+              AppConfig.setApiBaseUrl(url);
+            }
+            Navigator.pop(context);
+          },
+          child: const Text('SAVE'),
+        ),
+      ],
     );
   }
 }
