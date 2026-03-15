@@ -15,13 +15,15 @@ Reliquary preserves what the world discards.
 
 ## Features
 
-- **Multi-file upload** with progress tracking and automatic deduplication (SHA-256)
+- **Multi-file upload** with progress tracking, duplicate detection (SHA-256), and download support
 - **Thumbnail generation** for images (resize) and videos (ffmpeg first-frame extraction)
 - **Multi-user support** with admin/user roles and per-user isolated storage
 - **Lifecycle archival** — automatically archive files older than a configurable threshold
 - **Storage analytics** — file counts, storage usage by type and month
 - **Configurable server URL** — connect to different Reliquary instances (portable drive support)
+- **Responsive UI** — bottom navigation on mobile, sidebar on desktop, industrial design theme
 - **All file types supported** — images, videos, documents, archives, etc.
+- **Cross-platform** — web, Android, iOS, Linux desktop
 
 ## Development
 
@@ -111,7 +113,7 @@ The server listens on a unix socket by default for use with the Caddy proxy. For
 | GET | `/api/health` | No | Health check |
 | POST | `/api/upload` | Yes | Multipart file upload with dedup |
 | GET | `/api/files?offset=0&limit=50` | Yes | List files (paginated) |
-| GET | `/api/files/presign?key=...` | Yes | Presigned download URL |
+| GET | `/api/files/presign?key=...&download=true` | Yes | Presigned download URL (`download=true` forces save) |
 | DELETE | `/api/files?key=...` | Yes | Delete file and thumbnail |
 | GET | `/api/archive?offset=0&limit=50` | Yes | List archived files |
 | POST | `/api/archive/restore?key=...` | Yes | Restore from archive |
@@ -157,22 +159,24 @@ flutter run -d chrome        # Chrome (set CHROME_EXECUTABLE for Firefox)
 ```
 
 Features:
-- Login with JWT authentication (multi-user)
-- Multi-file upload with progress tracking
+- Login with JWT authentication (multi-user) and server URL configuration
+- Multi-file upload with progress tracking and duplicate detection
 - Thumbnail gallery with tap-to-view full resolution
+- File download, details, and delete via long-press menu
 - Content-type aware file icons (image, video, audio, PDF, archive)
 - File metadata display (checksum, upload date, original name)
 - Archive browser with restore and permanent delete
 - Storage analytics dashboard
 - Admin user management (create, delete, change password)
-- Configurable server URL (settings screen)
+- Configurable server URL (login screen + settings)
+- Responsive layout: bottom navigation (mobile), sidebar (desktop)
 - Change password (settings screen)
 
 ## Deployment
 
 ### Build
 
-Requires [Nix](https://nixos.org/) with flakes enabled and [Docker](https://docs.docker.com/get-docker/).
+Requires [Nix](https://nixos.org/) with flakes enabled and [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/).
 
 ```bash
 # 1. Build the container image (includes MinIO, Go backend, Caddy, ffmpeg)
@@ -191,7 +195,7 @@ docker commit reliquary-tmp reliquary:latest
 docker rm reliquary-tmp
 ```
 
-Or use the deploy script which does all of the above:
+Or use the deploy script which does all of the above (auto-detects docker/podman):
 
 ```bash
 ./bin/deploy
@@ -204,8 +208,9 @@ Or use the deploy script which does all of the above:
 cp .env.example .env
 # Edit .env with your production values (especially JWT_SECRET and passwords)
 
-# Start
+# Start (docker or podman)
 docker compose up -d
+# or: podman compose up -d
 ```
 
 The application is available at `http://localhost:2080`.

@@ -46,8 +46,8 @@ shutdown-infra           # Stop all services
 - **`frontend/`** — Flutter application (web, Android, iOS, Linux desktop targets).
   - `lib/config.dart` — API base URL configuration (persisted, configurable at runtime).
   - `lib/models/` — Data models (FileItem with content type, checksum, metadata).
-  - `lib/services/` — Auth service (JWT + username/role + shared_preferences) and API service (Dio + multipart upload + presigned URL caching + admin/archive/stats API).
-  - `lib/screens/` — Login, gallery (thumbnail grid + full-res viewer), upload (multi-file with progress), archive (browse/restore/delete), stats (analytics dashboard), admin (user management), settings (server URL + password change).
+  - `lib/services/` — Auth service (JWT + username/role + shared_preferences), API service (Dio + multipart upload + presigned URL caching + admin/archive/stats API), and platform file picker (custom HTML implementation for web, file_picker for native).
+  - `lib/screens/` — Login (with server config), gallery (thumbnail grid + full-res viewer + download + file menu), upload (multi-file with progress + duplicate detection), archive (browse/restore/delete), stats (analytics dashboard), admin (user management), settings (server URL + password change). Responsive navigation: bottom bar on mobile, sidebar on desktop.
 - **`infra/minio.nix`** — Defines MinIO process-compose processes as a Nix attrset. Uses ephemeral ports (allocated via Python at runtime) and writes them to `$DATA_DIR/minio/port` and `$DATA_DIR/minio/console_port`. Includes a `minio-create-bucket` process that depends on MinIO being healthy.
 - **`infra/caddy.nix`** — Caddy reverse proxy process. Routes `/api/*` to the Go backend (unix socket) and `/storage/*` to MinIO. Handles CORS and strips duplicate MinIO CORS headers. Listens on port 2080 by default.
 - **`bin/`** — Shell scripts injected into PATH by the dev shell. Includes `dev` (tmux launcher), `start-backend`, `start-frontend`, `start-infra`, `load-infra-env`, `shutdown-infra`.
@@ -65,7 +65,7 @@ All endpoints except `/api/login` and `/api/health` require a `Bearer` JWT token
 | GET | `/api/health` | Health check |
 | POST | `/api/upload` | Multipart file upload (field: `file`), dedup by SHA-256, triggers thumbnail generation |
 | GET | `/api/files?offset=0&limit=50` | List user's files (paginated, includes metadata) |
-| GET | `/api/files/presign?key=...` | Presigned download URL (routed through proxy) |
+| GET | `/api/files/presign?key=...&download=true` | Presigned download URL (relative path, `download=true` forces content-disposition attachment) |
 | DELETE | `/api/files?key=...` | Delete file, thumbnail, and checksum index entry |
 
 ### Archive
@@ -132,6 +132,8 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Nix store paths in process-compose**: Commands in `minio.nix` use `pkgs.writeShellScript`, so the generated YAML references `/nix/store/...` paths directly. The YAML is only valid inside the dev shell.
 - **MinIO credentials**: Default dev credentials are `minioadmin/minioadmin`. Default bucket is `reliquary`.
 - **Layered dev shells**: Each shell (`infra`, `backend`, `frontend`) composes via `inputsFrom`, so every shell includes infra tooling. The default `full` shell combines backend and frontend.
+- **Relative presigned URLs**: Backend returns relative paths (`/storage/...`) for presigned URLs. Frontend prepends its configured `apiBaseUrl`, enabling cross-device access (e.g., mobile on LAN).
+- **Custom web file picker**: Flutter's `file_picker` package is unreliable on web. A custom implementation using `HTMLInputElement` directly is used for web; native platforms use `file_picker`.
 
 ## Deployment
 
@@ -148,11 +150,11 @@ docker create --name tmp reliquary:latest
 docker cp frontend/build/web/. tmp:/srv/web/
 docker commit tmp reliquary:latest && docker rm tmp
 
-# Or use the deploy script
+# Or use the deploy script (auto-detects docker/podman)
 ./bin/deploy
 ```
 
-Run with docker-compose:
+Run with docker-compose (or podman compose):
 
 ```bash
 cp .env.example .env    # Edit with production values
