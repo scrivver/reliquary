@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import 'admin_screen.dart';
 import 'login_screen.dart';
 import 'settings_screen.dart';
+import 'stats_screen.dart';
 import 'upload_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -236,6 +237,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
               },
               tooltip: 'User Management',
             ),
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => StatsScreen(apiService: _apiService),
+                ),
+              );
+            },
+            tooltip: 'Analytics',
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {

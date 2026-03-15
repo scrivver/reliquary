@@ -95,6 +95,14 @@ class ApiService {
     await _dio.delete('/api/files', queryParameters: {'key': key});
   }
 
+  // --- Stats API ---
+
+  /// Get storage analytics for the current user.
+  Future<Map<String, dynamic>> getStats() async {
+    final response = await _dio.get('/api/stats');
+    return response.data as Map<String, dynamic>;
+  }
+
   // --- Admin API ---
 
   /// List all users (admin only).
