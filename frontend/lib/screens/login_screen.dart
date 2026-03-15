@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../config.dart';
 import '../services/auth_service.dart';
 import 'app_shell.dart';
 
@@ -53,9 +54,58 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _showServerConfig() {
+    final controller = TextEditingController(text: AppConfig.apiBaseUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('SERVER_ENDPOINT', style: GoogleFonts.spaceGrotesk(
+          fontWeight: FontWeight.w700, letterSpacing: 1.0,
+        )),
+        content: TextField(
+          controller: controller,
+          style: GoogleFonts.spaceMono(fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'http://192.168.1.100:2080',
+            hintStyle: GoogleFonts.spaceMono(fontSize: 13, color: Colors.grey[400]),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await AppConfig.resetApiBaseUrl();
+              controller.text = AppConfig.defaultApiBaseUrl;
+            },
+            child: const Text('RESET'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final url = controller.text.trim();
+              if (url.isNotEmpty) {
+                await AppConfig.setApiBaseUrl(url);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('SAVE'),
+          ),
+        ],
+      ),
+    ).then((_) => controller.dispose());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 40,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, size: 20),
+            onPressed: _showServerConfig,
+            tooltip: 'SERVER_CONFIG',
+          ),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 380),
