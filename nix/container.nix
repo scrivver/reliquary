@@ -148,7 +148,6 @@ pkgs.dockerTools.buildLayeredImage {
     ];
     Volumes = {
       "/data/minio" = {};
-      "/srv/web" = {};
     };
   };
 }
