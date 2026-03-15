@@ -94,6 +94,35 @@ class ApiService {
   Future<void> deleteFile(String key) async {
     await _dio.delete('/api/files', queryParameters: {'key': key});
   }
+
+  // --- Admin API ---
+
+  /// List all users (admin only).
+  Future<List<Map<String, dynamic>>> listUsers() async {
+    final response = await _dio.get('/api/admin/users');
+    return (response.data as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Create a new user (admin only).
+  Future<void> createUser(String username, String password, String role) async {
+    await _dio.post('/api/admin/users', data: {
+      'username': username,
+      'password': password,
+      'role': role,
+    });
+  }
+
+  /// Delete a user (admin only).
+  Future<void> deleteUser(String username) async {
+    await _dio.delete('/api/admin/users/$username');
+  }
+
+  /// Change a user's password.
+  Future<void> changePassword(String username, String newPassword) async {
+    await _dio.put('/api/admin/users/$username/password', data: {
+      'password': newPassword,
+    });
+  }
 }
 
 class FileListResult {
