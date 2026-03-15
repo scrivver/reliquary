@@ -84,7 +84,8 @@ class ApiService {
 
     final response =
         await _dio.get('/api/files/presign', queryParameters: {'key': key});
-    final url = response.data['url'] as String;
+    final relativePath = response.data['url'] as String;
+    final url = AppConfig.apiBaseUrl + relativePath;
 
     _urlCache[key] = _CachedUrl(url: url, expiresAt: DateTime.now().add(_cacheTtl));
     return url;
@@ -95,7 +96,8 @@ class ApiService {
   Future<String> presignDownloadForSave(String key) async {
     final response = await _dio.get('/api/files/presign',
         queryParameters: {'key': key, 'download': 'true'});
-    return response.data['url'] as String;
+    final relativePath = response.data['url'] as String;
+    return AppConfig.apiBaseUrl + relativePath;
   }
 
   /// Delete a file from the archive.

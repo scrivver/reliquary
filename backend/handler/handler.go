@@ -173,12 +173,13 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	proxyURL := h.proxyBaseURL + "/storage" + presignedURL.Path
+	// Return a relative path so clients can prepend their own server URL.
+	relativeURL := "/storage" + presignedURL.Path
 	if presignedURL.RawQuery != "" {
-		proxyURL += "?" + presignedURL.RawQuery
+		relativeURL += "?" + presignedURL.RawQuery
 	}
 
-	jsonResponse(w, PresignDownloadResponse{URL: proxyURL})
+	jsonResponse(w, PresignDownloadResponse{URL: relativeURL})
 }
 
 // DeleteFile removes a file and its thumbnail from MinIO.
