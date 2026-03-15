@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -24,6 +26,10 @@ type Config struct {
 	JWTSecret string
 	Username  string
 	Password  string
+
+	// Lifecycle
+	ArchiveAfterDays   int
+	ArchiveCheckInterval time.Duration
 }
 
 func Load() (*Config, error) {
@@ -45,6 +51,9 @@ func Load() (*Config, error) {
 		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
 		Username:       envOr("AUTH_USERNAME", "admin"),
 		Password:       envOr("AUTH_PASSWORD", "admin"),
+
+		ArchiveAfterDays:     envOrInt("ARCHIVE_AFTER_DAYS", 90),
+		ArchiveCheckInterval: time.Duration(envOrInt("ARCHIVE_CHECK_HOURS", 24)) * time.Hour,
 	}
 
 	return cfg, nil
@@ -53,6 +62,15 @@ func Load() (*Config, error) {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func envOrInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }

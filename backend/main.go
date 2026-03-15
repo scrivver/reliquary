@@ -43,7 +43,11 @@ func main() {
 
 	authSvc := auth.NewService(cfg)
 	thumbs := worker.NewThumbnailWorker(store)
-	h := handler.New(cfg, store, thumbs, checksums)
+	archival := worker.NewArchivalWorker(cfg, store, checksums)
+	h := handler.New(cfg, store, thumbs, checksums, archival)
+
+	// Start archival worker in background.
+	go archival.Start(context.Background())
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -65,6 +69,11 @@ func main() {
 		r.Get("/api/files", h.ListFiles)
 		r.Get("/api/files/presign", h.PresignDownload)
 		r.Delete("/api/files", h.DeleteFile)
+
+		r.Get("/api/archive", h.ListArchive)
+		r.Post("/api/archive/restore", h.RestoreArchive)
+		r.Post("/api/archive/run", h.RunArchival)
+		r.Delete("/api/archive", h.DeleteArchive)
 	})
 
 	var ln net.Listener

@@ -87,3 +87,19 @@ func (c *Client) DeleteObject(ctx context.Context, key string) error {
 func (c *Client) StatObject(ctx context.Context, key string) (minio.ObjectInfo, error) {
 	return c.mc.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})
 }
+
+// CopyObject copies an object to a new key within the same bucket (server-side).
+func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
+	src := minio.CopySrcOptions{Bucket: c.bucket, Object: srcKey}
+	dst := minio.CopyDestOptions{Bucket: c.bucket, Object: dstKey}
+	_, err := c.mc.CopyObject(ctx, dst, src)
+	return err
+}
+
+// MoveObject copies an object to a new key and deletes the original.
+func (c *Client) MoveObject(ctx context.Context, srcKey, dstKey string) error {
+	if err := c.CopyObject(ctx, srcKey, dstKey); err != nil {
+		return fmt.Errorf("copy %q -> %q: %w", srcKey, dstKey, err)
+	}
+	return c.DeleteObject(ctx, srcKey)
+}

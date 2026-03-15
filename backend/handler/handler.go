@@ -24,12 +24,13 @@ import (
 type Handler struct {
 	store        *storage.Client
 	thumbs       *worker.ThumbnailWorker
+	archival     *worker.ArchivalWorker
 	checksums    *storage.ChecksumIndex
 	proxyBaseURL string
 }
 
-func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker, checksums *storage.ChecksumIndex) *Handler {
-	return &Handler{store: store, thumbs: thumbs, checksums: checksums, proxyBaseURL: cfg.ProxyBaseURL}
+func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker, checksums *storage.ChecksumIndex, archival *worker.ArchivalWorker) *Handler {
+	return &Handler{store: store, thumbs: thumbs, archival: archival, checksums: checksums, proxyBaseURL: cfg.ProxyBaseURL}
 }
 
 // --- Request / Response types ---
@@ -276,6 +277,143 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]string{"status": "deleted"})
+}
+
+// ListArchive returns archived files with pagination.
+// GET /api/archive?offset=0&limit=50
+func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	objects, err := h.store.ListObjects(r.Context(), "user/archive/")
+	if err != nil {
+		slog.Error("list archived objects failed", "error", err)
+		httpError(w, "failed to list archived files", http.StatusInternalServerError)
+		return
+	}
+
+	totalCount := len(objects)
+
+	end := offset + limit
+	if offset > len(objects) {
+		objects = nil
+	} else {
+		if end > len(objects) {
+			end = len(objects)
+		}
+		objects = objects[offset:end]
+	}
+
+	files := make([]FileItem, 0, len(objects))
+	for _, obj := range objects {
+		ct := obj.ContentType
+		if ct == "" {
+			ct = mime.TypeByExtension(path.Ext(obj.Key))
+		}
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		item := FileItem{
+			Key:          obj.Key,
+			Size:         obj.Size,
+			ContentType:  ct,
+			LastModified: obj.LastModified,
+		}
+		if isImageContentType(ct) || isVideoContentType(ct) {
+			item.ThumbnailKey = strings.Replace(obj.Key, "/archive/", "/archive-thumbs/", 1)
+		}
+		if stat, err := h.store.StatObject(r.Context(), obj.Key); err == nil {
+			item.Checksum = stat.UserMetadata["Checksum"]
+			item.UploadDate = stat.UserMetadata["Upload-Date"]
+			item.OriginalName = stat.UserMetadata["Original-Name"]
+			if stat.ContentType != "" {
+				item.ContentType = stat.ContentType
+			}
+		}
+		files = append(files, item)
+	}
+
+	jsonResponse(w, FileListResponse{
+		Files:      files,
+		TotalCount: totalCount,
+		Offset:     offset,
+		Limit:      limit,
+	})
+}
+
+// RestoreArchive moves a file from archive back to active files.
+// POST /api/archive/restore?key=...
+func (h *Handler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		httpError(w, "key query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	restoredKey := strings.Replace(key, "/archive/", "/files/", 1)
+
+	if err := h.store.MoveObject(r.Context(), key, restoredKey); err != nil {
+		slog.Error("restore failed", "key", key, "error", err)
+		httpError(w, "failed to restore file", http.StatusInternalServerError)
+		return
+	}
+
+	// Move thumbnail back too.
+	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
+	restoredThumbKey := strings.Replace(key, "/archive/", "/thumbs/", 1)
+	if err := h.store.MoveObject(r.Context(), thumbKey, restoredThumbKey); err != nil {
+		slog.Debug("no archived thumbnail to restore", "key", thumbKey)
+	}
+
+	// Update checksum index.
+	if stat, err := h.store.StatObject(r.Context(), restoredKey); err == nil {
+		if cs := stat.UserMetadata["Checksum"]; cs != "" {
+			h.checksums.Add(r.Context(), cs, restoredKey)
+		}
+	}
+
+	slog.Info("file restored from archive", "from", key, "to", restoredKey)
+	jsonResponse(w, map[string]string{"status": "restored", "key": restoredKey})
+}
+
+// DeleteArchive removes an archived file.
+// DELETE /api/archive?key=...
+func (h *Handler) DeleteArchive(w http.ResponseWriter, r *http.Request) {
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		httpError(w, "key query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.store.DeleteObject(r.Context(), key); err != nil {
+		slog.Error("delete archived object failed", "key", key, "error", err)
+		httpError(w, "failed to delete archived file", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.checksums.RemoveByKey(r.Context(), key); err != nil {
+		slog.Error("failed to update checksum index on archive delete", "error", err)
+	}
+
+	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
+	if thumbKey != key {
+		h.store.DeleteObject(r.Context(), thumbKey)
+	}
+
+	jsonResponse(w, map[string]string{"status": "deleted"})
+}
+
+// RunArchival triggers the archival process manually.
+// POST /api/archive/run
+func (h *Handler) RunArchival(w http.ResponseWriter, r *http.Request) {
+	go h.archival.RunOnce(context.Background())
+	jsonResponse(w, map[string]string{"status": "archival started"})
 }
 
 // --- Helpers ---
