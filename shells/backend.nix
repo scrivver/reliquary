@@ -9,5 +9,6 @@ pkgs.mkShell {
     pkgs.gotools
     pkgs.air
     pkgs.ffmpeg
+    pkgs.poppler-utils
   ];
 }

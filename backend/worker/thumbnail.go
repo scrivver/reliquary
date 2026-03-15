@@ -87,6 +87,9 @@ func (w *ThumbnailWorker) generateThumbnail(ctx context.Context, fileKey, conten
 	if strings.HasPrefix(contentType, "video/") {
 		return w.generateVideoThumbnail(ctx, fileKey, thumbKey)
 	}
+	if contentType == "application/pdf" {
+		return w.generatePDFThumbnail(ctx, fileKey, thumbKey)
+	}
 
 	slog.Info("skipping thumbnail for unsupported type", "key", fileKey, "content_type", contentType)
 	return nil
@@ -158,6 +161,64 @@ func (w *ThumbnailWorker) generateVideoThumbnail(ctx context.Context, fileKey, t
 	}
 
 	slog.Info("video thumbnail generated", "key", thumbKey, "size", len(frameData))
+	return nil
+}
+
+func (w *ThumbnailWorker) generatePDFThumbnail(ctx context.Context, fileKey, thumbKey string) error {
+	// Download PDF to a temp file for pdftoppm.
+	obj, err := w.store.GetObject(ctx, fileKey)
+	if err != nil {
+		return fmt.Errorf("get object %q: %w", fileKey, err)
+	}
+	defer obj.Close()
+
+	tmpIn, err := os.CreateTemp("", "reliquary-pdf-*.pdf")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpIn.Name())
+	defer tmpIn.Close()
+
+	if _, err := io.Copy(tmpIn, obj); err != nil {
+		return fmt.Errorf("download pdf: %w", err)
+	}
+	tmpIn.Close()
+
+	// Render first page with pdftoppm.
+	tmpOutPrefix, err := os.CreateTemp("", "reliquary-pdfthumb-")
+	if err != nil {
+		return fmt.Errorf("create temp output: %w", err)
+	}
+	tmpOutBase := tmpOutPrefix.Name()
+	tmpOutPrefix.Close()
+	os.Remove(tmpOutBase)
+
+	cmd := exec.CommandContext(ctx, "pdftoppm",
+		"-jpeg",
+		"-f", "1",
+		"-l", "1",
+		"-scale-to", fmt.Sprintf("%d", thumbWidth),
+		tmpIn.Name(),
+		tmpOutBase,
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("pdftoppm render: %w\noutput: %s", err, output)
+	}
+
+	// pdftoppm outputs as {prefix}-{page}.jpg (e.g., /tmp/reliquary-pdfthumb-123-1.jpg)
+	outFile := tmpOutBase + "-1.jpg"
+	defer os.Remove(outFile)
+
+	pageData, err := os.ReadFile(outFile)
+	if err != nil {
+		return fmt.Errorf("read pdf page: %w", err)
+	}
+
+	if err := w.store.PutObject(ctx, thumbKey, bytes.NewReader(pageData), int64(len(pageData)), "image/jpeg", nil); err != nil {
+		return fmt.Errorf("put pdf thumbnail %q: %w", thumbKey, err)
+	}
+
+	slog.Info("pdf thumbnail generated", "key", thumbKey, "size", len(pageData))
 	return nil
 }
 

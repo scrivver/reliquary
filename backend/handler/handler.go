@@ -148,7 +148,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update checksum index", "error", err)
 	}
 
-	if isImageContentType(contentType) || isVideoContentType(contentType) {
+	if hasThumbnailSupport(contentType) {
 		h.thumbs.Submit(fileKey, contentType)
 	}
 
@@ -497,7 +497,7 @@ func (h *Handler) listObjectsWithPagination(w http.ResponseWriter, r *http.Reque
 			ContentType:  ct,
 			LastModified: obj.LastModified,
 		}
-		if isImageContentType(ct) || isVideoContentType(ct) {
+		if hasThumbnailSupport(ct) {
 			item.ThumbnailKey = strings.Replace(obj.Key, filesSegment, thumbsSegment, 1)
 		}
 		if stat, err := h.store.StatObject(r.Context(), obj.Key); err == nil {
@@ -551,4 +551,12 @@ func isImageContentType(ct string) bool {
 
 func isVideoContentType(ct string) bool {
 	return strings.HasPrefix(ct, "video/")
+}
+
+func isPDFContentType(ct string) bool {
+	return ct == "application/pdf"
+}
+
+func hasThumbnailSupport(ct string) bool {
+	return isImageContentType(ct) || isVideoContentType(ct) || isPDFContentType(ct)
 }

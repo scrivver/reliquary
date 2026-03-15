@@ -118,6 +118,7 @@ pkgs.dockerTools.buildLayeredImage {
     pkgs.minio-client
     pkgs.caddy
     pkgs.ffmpeg
+    pkgs.poppler-utils
     pkgs.cacert
     pkgs.coreutils
     pkgs.curl

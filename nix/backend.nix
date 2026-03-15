@@ -8,12 +8,12 @@ pkgs.buildGoModule {
 
   vendorHash = "sha256-6tKINcMT9d5G5jyMkZPoCAwnY4+sdNRFK1wsR030FQY=";
 
-  # ffmpeg is needed at runtime for video thumbnail generation
+  # ffmpeg and poppler-utils needed at runtime for thumbnail generation
   nativeBuildInputs = [ pkgs.makeWrapper ];
 
   postInstall = ''
     wrapProgram $out/bin/reliquary-be \
-      --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.ffmpeg ]}
+      --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.ffmpeg pkgs.poppler-utils ]}
   '';
 
   meta = {
