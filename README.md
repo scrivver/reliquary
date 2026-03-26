@@ -135,11 +135,33 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Listen address (path = unix socket) |
-| `AUTH_USERNAME` | `admin` | Initial admin username |
-| `AUTH_PASSWORD` | `admin` | Initial admin password |
+| `AUTH_MODE` | `full` | Auth mode: `full`, `proxy`, or `none` (see below) |
+| `AUTH_USERNAME` | `admin` | Initial admin / default user |
+| `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
 | `ARCHIVE_AFTER_DAYS` | `90` | Days before auto-archival |
 | `ARCHIVE_CHECK_HOURS` | `24` | Hours between archival scans |
+
+#### Auth Modes
+
+| Mode | Use case | Auth | User identity |
+|------|----------|------|--------------|
+| `full` | Standalone deployment | JWT login | From JWT token |
+| `proxy` | Behind auth proxy (nginx, OAuth2 proxy, Tailscale) | None | From `X-Reliquary-User` header |
+| `none` | Single-user, CLI scripts, embedded | None | Fixed default user |
+
+**Proxy mode** example with nginx:
+```nginx
+location / {
+    proxy_set_header X-Reliquary-User $remote_user;
+    proxy_pass http://127.0.0.1:2080;
+}
+```
+
+**None mode** — no login required, all files belong to the default user:
+```bash
+AUTH_MODE=none MINIO_PORT=9000 go run .
+```
 
 ### Frontend
 

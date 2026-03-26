@@ -113,9 +113,10 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Backend listen address (path = unix socket) |
-| `AUTH_USERNAME` | `admin` | Initial admin username |
-| `AUTH_PASSWORD` | `admin` | Initial admin password |
-| `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret |
+| `AUTH_MODE` | `full` | Auth mode: `full` (JWT), `proxy` (trust header), `none` (single user) |
+| `AUTH_USERNAME` | `admin` | Initial admin username / default user for proxy/none modes |
+| `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
+| `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret (full mode only) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail generation workers |
 | `ARCHIVE_AFTER_DAYS` | `90` | Days before files are auto-archived |
 | `ARCHIVE_CHECK_HOURS` | `24` | Hours between archival scans |
