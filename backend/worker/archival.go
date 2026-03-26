@@ -50,10 +50,18 @@ func (w *ArchivalWorker) RunOnce(ctx context.Context) {
 	cutoff := time.Now().Add(-time.Duration(w.cfg.ArchiveAfterDays) * 24 * time.Hour)
 	slog.Info("archival scan starting", "cutoff", cutoff.Format(time.RFC3339))
 
-	users := w.users.List()
-	totalArchived := 0
+	var usernames []string
+	if w.users != nil {
+		for name := range w.users.List() {
+			usernames = append(usernames, name)
+		}
+	} else {
+		// Headless mode — use default user from config.
+		usernames = []string{w.cfg.Username}
+	}
 
-	for username := range users {
+	totalArchived := 0
+	for _, username := range usernames {
 		archived := w.archiveUserFiles(ctx, username, cutoff)
 		totalArchived += archived
 	}

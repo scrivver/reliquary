@@ -23,6 +23,7 @@ type Config struct {
 	MinIOUseSSL    bool
 
 	// Auth
+	AuthMode  string // "full" (JWT), "proxy" (trust header), "none" (single user)
 	JWTSecret string
 	Username  string
 	Password  string
@@ -51,6 +52,7 @@ func Load() (*Config, error) {
 		MinIOSecretKey: envOr("MINIO_SECRET_KEY", "minioadmin"),
 		MinIOBucket:    envOr("MINIO_BUCKET", "reliquary"),
 		MinIOUseSSL:    strings.ToLower(envOr("MINIO_USE_SSL", "false")) == "true",
+		AuthMode:       strings.ToLower(envOr("AUTH_MODE", "full")),
 		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
 		Username:       envOr("AUTH_USERNAME", "admin"),
 		Password:       envOr("AUTH_PASSWORD", "admin"),
