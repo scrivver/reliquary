@@ -13,6 +13,16 @@ class AuthService {
   String? _cachedUsername;
   String? _cachedRole;
 
+  /// Check the server's auth mode. Returns "full", "proxy", or "none".
+  Future<String> getAuthMode() async {
+    try {
+      final response = await _dio.get('${AppConfig.apiBaseUrl}/api/health');
+      return (response.data['auth_mode'] as String?) ?? 'full';
+    } catch (_) {
+      return 'full';
+    }
+  }
+
   Future<bool> login(String username, String password) async {
     try {
       final response = await _dio.post(

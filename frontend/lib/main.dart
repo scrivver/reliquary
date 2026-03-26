@@ -48,6 +48,18 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _checkAuth() async {
+    // Check server auth mode — skip login if not needed.
+    final authMode = await _authService.getAuthMode();
+    if (authMode == 'none' || authMode == 'proxy') {
+      if (mounted) {
+        setState(() {
+          _loggedIn = true;
+          _checking = false;
+        });
+      }
+      return;
+    }
+
     final loggedIn = await _authService.isLoggedIn();
     if (mounted) {
       setState(() {
