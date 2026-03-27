@@ -98,6 +98,18 @@ func main() {
 			registerFileRoutes(r, h)
 		})
 
+	case "oidc":
+		// OIDC mode — validate Bearer tokens against an OIDC provider.
+		oidcAuth, err := auth.NewOIDCAuthenticator(context.Background(), cfg)
+		if err != nil {
+			slog.Error("failed to initialize OIDC authenticator", "error", err)
+			os.Exit(1)
+		}
+		r.Group(func(r chi.Router) {
+			r.Use(oidcAuth.Middleware)
+			registerFileRoutes(r, h)
+		})
+
 	default: // "full"
 		// Full JWT auth mode.
 		authSvc := auth.NewService(cfg, users)

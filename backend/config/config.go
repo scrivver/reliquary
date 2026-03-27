@@ -23,10 +23,15 @@ type Config struct {
 	MinIOUseSSL    bool
 
 	// Auth
-	AuthMode  string // "full" (JWT), "proxy" (trust header), "none" (single user)
+	AuthMode  string // "full" (JWT), "proxy" (trust header), "none" (single user), "oidc" (OIDC token validation)
 	JWTSecret string
 	Username  string
 	Password  string
+
+	// OIDC (AUTH_MODE=oidc)
+	OIDCIssuerURL    string // e.g. "http://localhost:9000/application/o/mind-palace/"
+	OIDCClientID     string // expected aud claim
+	OIDCUsernameClaim string // JWT claim for username (default: preferred_username)
 
 	// Workers
 	ThumbnailWorkers int
@@ -56,6 +61,10 @@ func Load() (*Config, error) {
 		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
 		Username:       envOr("AUTH_USERNAME", "admin"),
 		Password:       envOr("AUTH_PASSWORD", "admin"),
+
+		OIDCIssuerURL:     envOr("OIDC_ISSUER_URL", ""),
+		OIDCClientID:      envOr("OIDC_CLIENT_ID", ""),
+		OIDCUsernameClaim: envOr("OIDC_USERNAME_CLAIM", "preferred_username"),
 
 		ThumbnailWorkers:     envOrInt("THUMBNAIL_WORKERS", 4),
 
