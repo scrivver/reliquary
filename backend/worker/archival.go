@@ -70,7 +70,7 @@ func (w *ArchivalWorker) RunOnce(ctx context.Context) {
 }
 
 func (w *ArchivalWorker) archiveUserFiles(ctx context.Context, username string, cutoff time.Time) int {
-	prefix := username + "/files/"
+	prefix := "files/" + username + "/"
 	objects, err := w.store.ListObjects(ctx, prefix)
 	if err != nil {
 		slog.Error("archival: failed to list objects", "user", username, "error", err)
@@ -83,15 +83,15 @@ func (w *ArchivalWorker) archiveUserFiles(ctx context.Context, username string, 
 			continue
 		}
 
-		archiveKey := strings.Replace(obj.Key, "/files/", "/archive/", 1)
+		archiveKey := "archive/" + strings.TrimPrefix(obj.Key, "files/")
 
 		if err := w.store.MoveObject(ctx, obj.Key, archiveKey); err != nil {
 			slog.Error("archival: failed to move object", "key", obj.Key, "error", err)
 			continue
 		}
 
-		thumbKey := strings.Replace(obj.Key, "/files/", "/thumbs/", 1)
-		archiveThumbKey := strings.Replace(obj.Key, "/files/", "/archive-thumbs/", 1)
+		thumbKey := "thumbs/" + strings.TrimPrefix(obj.Key, "files/")
+		archiveThumbKey := "archive-thumbs/" + strings.TrimPrefix(obj.Key, "files/")
 		if err := w.store.MoveObject(ctx, thumbKey, archiveThumbKey); err != nil {
 			slog.Debug("archival: no thumbnail to move", "key", thumbKey)
 		}

@@ -105,7 +105,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	baseName := strings.TrimSuffix(storedName, path.Ext(storedName))
 	ext := path.Ext(storedName)
-	fileKey := fmt.Sprintf("%s/files/%d/%02d/%s", username, now.Year(), now.Month(), storedName)
+	fileKey := fmt.Sprintf("files/%s/%d/%02d/%s", username, now.Year(), now.Month(), storedName)
 
 	// Avoid overwriting existing files by appending a suffix.
 	for i := 1; ; i++ {
@@ -113,7 +113,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
-		fileKey = fmt.Sprintf("%s/files/%d/%02d/%s_%d%s", username, now.Year(), now.Month(), baseName, i, ext)
+		fileKey = fmt.Sprintf("files/%s/%d/%02d/%s_%d%s", username, now.Year(), now.Month(), baseName, i, ext)
 	}
 
 	data, err := io.ReadAll(file)
@@ -139,6 +139,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		"Checksum":      checksum,
 		"Upload-Date":   now.UTC().Format(time.RFC3339),
 		"Original-Name": header.Filename,
+		"Owner":         username,
 	}
 
 	if err := h.store.PutObject(r.Context(), fileKey, bytes.NewReader(data), int64(len(data)), contentType, meta); err != nil {
@@ -164,15 +165,20 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 // GET /api/files?offset=0&limit=50
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	username := auth.UsernameFromContext(r.Context())
-	h.listObjectsWithPagination(w, r, username+"/files/", "/files/", "/thumbs/")
+	h.listObjectsWithPagination(w, r, "files/"+username+"/", "files/", "thumbs/")
 }
 
 // PresignDownload generates a presigned GET URL routed through the reverse proxy.
 // GET /api/files/presign?key=...
 func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
+		return
+	}
+	if !userOwnsKey(username, key) {
+		httpError(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -197,6 +203,7 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 // BatchDownload creates a zip archive of the requested files and streams it.
 // POST /api/files/download
 func (h *Handler) BatchDownload(w http.ResponseWriter, r *http.Request) {
+	username := auth.UsernameFromContext(r.Context())
 	var req BatchDownloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpError(w, "invalid request body", http.StatusBadRequest)
@@ -205,6 +212,12 @@ func (h *Handler) BatchDownload(w http.ResponseWriter, r *http.Request) {
 	if len(req.Keys) == 0 {
 		httpError(w, "no files specified", http.StatusBadRequest)
 		return
+	}
+	for _, key := range req.Keys {
+		if !userOwnsKey(username, key) {
+			httpError(w, "forbidden", http.StatusForbidden)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/zip")
@@ -249,6 +262,10 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
 		return
 	}
+	if !userOwnsKey(username, key) {
+		httpError(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
 	if err := h.store.DeleteObject(r.Context(), key); err != nil {
 		slog.Error("delete object failed", "key", key, "error", err)
@@ -260,8 +277,8 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update checksum index on delete", "error", err)
 	}
 
-	thumbKey := strings.Replace(key, "/files/", "/thumbs/", 1)
-	if thumbKey != key {
+	thumbKey := fileKeyToThumbKey(key)
+	if thumbKey != "" {
 		h.store.DeleteObject(r.Context(), thumbKey)
 	}
 
@@ -272,7 +289,7 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 // GET /api/archive?offset=0&limit=50
 func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
 	username := auth.UsernameFromContext(r.Context())
-	h.listObjectsWithPagination(w, r, username+"/archive/", "/archive/", "/archive-thumbs/")
+	h.listObjectsWithPagination(w, r, "archive/"+username+"/", "archive/", "archive-thumbs/")
 }
 
 // RestoreArchive moves a file from archive back to active files.
@@ -284,8 +301,16 @@ func (h *Handler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
 		return
 	}
+	if !userOwnsKey(username, key) {
+		httpError(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
-	restoredKey := strings.Replace(key, "/archive/", "/files/", 1)
+	restoredKey := rekeyPrefix(key, "archive/", "files/")
+	if restoredKey == "" {
+		httpError(w, "invalid archive key", http.StatusBadRequest)
+		return
+	}
 
 	if err := h.store.MoveObject(r.Context(), key, restoredKey); err != nil {
 		slog.Error("restore failed", "key", key, "error", err)
@@ -293,8 +318,8 @@ func (h *Handler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
-	restoredThumbKey := strings.Replace(key, "/archive/", "/thumbs/", 1)
+	thumbKey := rekeyPrefix(key, "archive/", "archive-thumbs/")
+	restoredThumbKey := rekeyPrefix(key, "archive/", "thumbs/")
 	if err := h.store.MoveObject(r.Context(), thumbKey, restoredThumbKey); err != nil {
 		slog.Debug("no archived thumbnail to restore", "key", thumbKey)
 	}
@@ -318,6 +343,10 @@ func (h *Handler) DeleteArchive(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
 		return
 	}
+	if !userOwnsKey(username, key) {
+		httpError(w, "forbidden", http.StatusForbidden)
+		return
+	}
 
 	if err := h.store.DeleteObject(r.Context(), key); err != nil {
 		slog.Error("delete archived object failed", "key", key, "error", err)
@@ -327,8 +356,8 @@ func (h *Handler) DeleteArchive(w http.ResponseWriter, r *http.Request) {
 
 	h.checksums.RemoveByKey(r.Context(), username, key)
 
-	thumbKey := strings.Replace(key, "/archive/", "/archive-thumbs/", 1)
-	if thumbKey != key {
+	thumbKey := rekeyPrefix(key, "archive/", "archive-thumbs/")
+	if thumbKey != "" {
 		h.store.DeleteObject(r.Context(), thumbKey)
 	}
 
@@ -568,6 +597,40 @@ func (h *Handler) listObjectsWithPagination(w http.ResponseWriter, r *http.Reque
 		Offset:     offset,
 		Limit:      limit,
 	})
+}
+
+// rekeyPrefix swaps the leading `from` segment of key with `to`.
+// Returns "" if key does not start with `from`.
+func rekeyPrefix(key, from, to string) string {
+	if !strings.HasPrefix(key, from) {
+		return ""
+	}
+	return to + strings.TrimPrefix(key, from)
+}
+
+// userOwnsKey checks that key lives in one of the owner-prefixed namespaces
+// for username (files/, archive/, thumbs/, archive-thumbs/).
+func userOwnsKey(username, key string) bool {
+	if username == "" {
+		return false
+	}
+	prefixes := [...]string{
+		"files/" + username + "/",
+		"archive/" + username + "/",
+		"thumbs/" + username + "/",
+		"archive-thumbs/" + username + "/",
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// fileKeyToThumbKey converts "files/<user>/..." to "thumbs/<user>/...".
+func fileKeyToThumbKey(key string) string {
+	return rekeyPrefix(key, "files/", "thumbs/")
 }
 
 func sanitizeFilename(name string) string {

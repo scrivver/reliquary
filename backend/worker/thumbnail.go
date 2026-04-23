@@ -251,12 +251,11 @@ func (w *ThumbnailWorker) resizeAndStore(ctx context.Context, thumbKey string, s
 	return nil
 }
 
-// fileToThumbKey converts "user/files/2026/03/img.jpg" to "user/thumbs/2026/03/img.jpg".
+// fileToThumbKey converts "files/<user>/2026/03/img.jpg" to "thumbs/<user>/2026/03/img.jpg".
 func fileToThumbKey(fileKey string) string {
-	const filesSegment = "/files/"
-	idx := strings.Index(fileKey, filesSegment)
-	if idx < 0 {
+	const filesSegment = "files/"
+	if !strings.HasPrefix(fileKey, filesSegment) {
 		return ""
 	}
-	return fileKey[:idx] + "/thumbs/" + fileKey[idx+len(filesSegment):]
+	return "thumbs/" + strings.TrimPrefix(fileKey, filesSegment)
 }

@@ -25,7 +25,7 @@ func (c *Client) ComputeUserStats(ctx context.Context, username string) (UserSta
 	}
 
 	// Active files.
-	filesPrefix := fmt.Sprintf("%s/files/", username)
+	filesPrefix := fmt.Sprintf("files/%s/", username)
 	files, err := c.ListObjects(ctx, filesPrefix)
 	if err != nil {
 		return stats, err
@@ -46,14 +46,14 @@ func (c *Client) ComputeUserStats(ctx context.Context, username string) (UserSta
 		major := strings.SplitN(ct, "/", 2)[0]
 		stats.ByType[major]++
 
-		// Group by month from the key path: {user}/files/YYYY/MM/...
+		// Group by month from the key path: files/{user}/YYYY/MM/...
 		if month := extractMonth(obj.Key, filesPrefix); month != "" {
 			stats.ByMonth[month]++
 		}
 	}
 
 	// Archived files.
-	archivePrefix := fmt.Sprintf("%s/archive/", username)
+	archivePrefix := fmt.Sprintf("archive/%s/", username)
 	archived, err := c.ListObjects(ctx, archivePrefix)
 	if err != nil {
 		return stats, err

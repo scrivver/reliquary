@@ -8,10 +8,10 @@ func TestExtractMonth(t *testing.T) {
 		prefix string
 		want   string
 	}{
-		{"admin/files/2026/03/photo.jpg", "admin/files/", "2026/03"},
-		{"alice/files/2025/12/doc.pdf", "alice/files/", "2025/12"},
-		{"admin/files/photo.jpg", "admin/files/", ""},
-		{"", "admin/files/", ""},
+		{"files/admin/2026/03/photo.jpg", "files/admin/", "2026/03"},
+		{"files/alice/2025/12/doc.pdf", "files/alice/", "2025/12"},
+		{"files/admin/photo.jpg", "files/admin/", ""},
+		{"", "files/admin/", ""},
 	}
 
 	for _, tt := range tests {
