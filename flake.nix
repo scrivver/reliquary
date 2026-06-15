@@ -25,12 +25,16 @@
 	frontendShell = import ./shells/frontend.nix { inherit pkgs infraShell; };
 	backendPkg = import ./nix/backend.nix { inherit pkgs; };
 	containerImg = import ./nix/container.nix { inherit pkgs; };
+	apiImg = import ./nix/api-container.nix { inherit pkgs; };
+	ingressImg = import ./nix/ingress-container.nix { inherit pkgs; };
 	thumbnailWorkerImg = import ./nix/thumbnail-worker-container.nix { inherit pkgs; };
 	in
 	{
 	packages = {
 	backend = backendPkg;
 	container = containerImg;
+	api-container = apiImg;
+	ingress-container = ingressImg;
 	thumbnail-worker-container = thumbnailWorkerImg;
 	default = backendPkg;
 	};

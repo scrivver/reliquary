@@ -10,6 +10,7 @@ pkgs.mkShell {
     pkgs.python3
     pkgs.curl
     pkgs.nodejs_24
+    pkgs.rsync
   ];
 
   shellHook = ''

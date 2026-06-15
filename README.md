@@ -226,20 +226,9 @@ The application is available at `http://localhost:2080`. Default credentials: `a
 Requires [Nix](https://nixos.org/) with flakes enabled and [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/).
 
 ```bash
-# 1. Build the container image (includes MinIO, Go backend, Caddy, ffmpeg)
-nix build .#container
-docker load < result
-
-# 2. Build the Flutter web frontend
-cd frontend
-flutter build web --release
-cd ..
-
-# 3. Copy the web build into the container
-docker create --name reliquary-tmp reliquary:latest
-docker cp frontend/build/web/. reliquary-tmp:/srv/web/
-docker commit reliquary-tmp reliquary:latest
-docker rm reliquary-tmp
+# Build the Flutter web app and load the API, worker, and ingress images
+nix develop
+./bin/deploy
 ```
 
 Or use the deploy script which does all of the above (auto-detects docker/podman):
@@ -310,15 +299,11 @@ overwrites active objects, and rebuilds per-user checksum indexes.
 
 ### Architecture
 
-The all-in-one application container runs four processes managed by the entrypoint:
-- **MinIO** — object storage on `127.0.0.1:9000` (internal only)
-- **Go backend** — API server on a unix socket
-- **Thumbnail worker** — consumes durable RabbitMQ jobs
-- **Caddy** — reverse proxy on `:2080`, serves Flutter web build, routes `/api/*` and `/storage/*`
-
-Compose also runs RabbitMQ with durable `engram.ingest`,
-`reliquary.thumbnail`, and `reliquary.thumbnail.dead` queues. MinIO and RabbitMQ
-data are persisted via `minio_data` and `rabbitmq_data`.
+The default Compose deployment runs separate ingress, API, thumbnail worker,
+MinIO, and RabbitMQ containers. Only ingress publishes port `2080`; storage and
+queue traffic stays on the internal network. See
+[`docs/split-container-deployment.md`](docs/split-container-deployment.md) for
+build, scaling, health-check, and all-in-one compatibility instructions.
 
 ### Mobile Apps
 

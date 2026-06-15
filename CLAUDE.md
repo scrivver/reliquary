@@ -147,20 +147,10 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 
 ## Deployment
 
-The project builds a single all-in-one OCI container image using Nix's `dockerTools`:
+The default production-oriented deployment uses separate OCI images:
 
 ```bash
-# Build container (MinIO + Go backend + Caddy + ffmpeg, all from nixpkgs)
-nix build .#container
-docker load < result
-
-# Build Flutter web and copy into image
-cd frontend && flutter build web --release && cd ..
-docker create --name tmp reliquary:latest
-docker cp frontend/build/web/. tmp:/srv/web/
-docker commit tmp reliquary:latest && docker rm tmp
-
-# Or use the deploy script (auto-detects docker/podman)
+# Build Flutter web and load API, thumbnail worker, and ingress images
 ./bin/deploy
 ```
 
@@ -174,16 +164,14 @@ docker compose up -d    # Available at http://localhost:2080
 ### Nix Build Targets
 
 - `nix build .#backend` — API, thumbnail worker, and restore binaries
-- `nix build .#container` — OCI image (reliquary.tar.gz)
+- `nix build .#api-container` — dedicated API image
 - `nix build .#thumbnail-worker-container` — dedicated thumbnail worker image
+- `nix build .#ingress-container` — Caddy ingress image
+- `nix build .#container` — retained all-in-one image
 
 ### Container Architecture
 
-All-in-one application container running four processes:
-- **MinIO** (`127.0.0.1:9000`) — object storage, internal only
-- **Go backend** (unix socket) — API server
-- **Thumbnail worker** — durable RabbitMQ consumer
-- **Caddy** (`:2080`) — reverse proxy + static file server for Flutter web
-
-Compose adds RabbitMQ with Engram and thumbnail queues. MinIO and RabbitMQ use
-separate persistent volumes.
+The default Compose file separates Caddy ingress, API, thumbnail worker, MinIO,
+and RabbitMQ. `minio-init` creates the storage bucket before the API and worker
+start. `bin/deploy-all-in-one` and `docker-compose.all-in-one.yml` preserve the
+combined deployment.

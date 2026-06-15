@@ -13,10 +13,6 @@ else
   exit 1
 fi
 
-echo "Using container runtime: $CTR"
-echo "=== Building Reliquary split-container deployment ==="
-
-echo "Building Flutter web..."
 cd "$PROJECT_ROOT/frontend"
 flutter build web --release
 
@@ -31,15 +27,14 @@ rsync -a \
   --exclude 'result*' \
   "$PROJECT_ROOT/" "$BUILD_ROOT/"
 
-for target in api-container thumbnail-worker-container ingress-container; do
-  echo "Building $target..."
-  image_path=$(nix build "path:$BUILD_ROOT#$target" --no-link --print-out-paths)
-  "$CTR" load < "$image_path"
-done
+image_path=$(nix build "path:$BUILD_ROOT#container" --no-link --print-out-paths)
+"$CTR" load < "$image_path"
 
-echo
-echo "=== Ready to deploy ==="
-echo
-echo "  cp .env.example .env"
-echo "  # Edit .env with production credentials."
-echo "  $CTR compose up -d"
+"$CTR" rm -f reliquary-build >/dev/null 2>&1 || true
+"$CTR" create --name reliquary-build reliquary:latest
+"$CTR" cp "$PROJECT_ROOT/frontend/build/web/." reliquary-build:/srv/web/
+"$CTR" commit reliquary-build reliquary:latest >/dev/null
+"$CTR" rm reliquary-build >/dev/null
+
+echo "All-in-one image ready."
+echo "  $CTR compose -f docker-compose.all-in-one.yml up -d"

@@ -2,6 +2,9 @@
 
 let
   backend = import ./backend.nix { inherit pkgs; };
+  healthcheck = pkgs.writeShellScriptBin "reliquary-thumbnail-worker-healthcheck" ''
+    kill -0 1
+  '';
 in
 pkgs.dockerTools.buildLayeredImage {
   name = "reliquary-thumbnail-worker";
@@ -12,6 +15,7 @@ pkgs.dockerTools.buildLayeredImage {
     pkgs.ffmpeg
     pkgs.poppler-utils
     pkgs.cacert
+    healthcheck
   ];
 
   config = {
