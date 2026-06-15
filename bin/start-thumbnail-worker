@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ -z "${DATA_DIR:-}" ]; then
+  echo "ERROR: DATA_DIR is not set. Are you in the dev shell? (nix develop)" >&2
+  exit 1
+fi
+
+source load-infra-env
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+tmux new-window -n thumbnail-worker 2>/dev/null \
+  || tmux new-session -d -s thumbnail-worker -n thumbnail-worker
+
+tmux send-keys -t thumbnail-worker \
+  "cd $PROJECT_ROOT/backend && go run ./cmd/reliquary-thumbnail-worker" Enter
+
+echo "Thumbnail worker started in tmux window 'thumbnail-worker'"

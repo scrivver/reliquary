@@ -89,6 +89,11 @@ let
     reliquary-be &
     BACKEND_PID=$!
 
+    # Start thumbnail worker as a separate process.
+    echo "Starting thumbnail worker..."
+    reliquary-thumbnail-worker &
+    THUMBNAIL_PID=$!
+
     # Wait for backend socket
     for i in $(seq 1 30); do
       [ -S "$LISTEN_ADDR" ] && break
@@ -103,7 +108,7 @@ let
     echo "Reliquary ready on :2080"
 
     # Wait for any process to exit
-    wait -n $MINIO_PID $BACKEND_PID $CADDY_PID
+    wait -n $MINIO_PID $BACKEND_PID $THUMBNAIL_PID $CADDY_PID
     exit $?
   '';
 
@@ -143,7 +148,11 @@ pkgs.dockerTools.buildLayeredImage {
       "AUTH_USERNAME=admin"
       "AUTH_PASSWORD=admin"
       "JWT_SECRET=change-me-in-production"
-      "THUMBNAIL_WORKERS=4"
+      "THUMBNAIL_QUEUE=reliquary.thumbnail"
+      "THUMBNAIL_DEAD_QUEUE=reliquary.thumbnail.dead"
+      "THUMBNAIL_PREFETCH=1"
+      "THUMBNAIL_CONCURRENCY=4"
+      "THUMBNAIL_MAX_ATTEMPTS=5"
       "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
     ];
     Volumes = {

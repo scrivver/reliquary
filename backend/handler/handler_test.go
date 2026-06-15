@@ -20,6 +20,7 @@ import (
 	"reliquary-be/auth"
 	"reliquary-be/event"
 	"reliquary-be/storage"
+	"reliquary-be/thumbnail"
 )
 
 type fakeFileStore struct {
@@ -62,6 +63,21 @@ func (e *fakeEmitter) Emit(_ context.Context, evt event.FileEvent) error {
 	return e.err
 }
 func (*fakeEmitter) Close() error { return nil }
+
+type fakeThumbnailPublisher struct {
+	jobs  []thumbnail.Job
+	err   error
+	order *[]string
+}
+
+func (p *fakeThumbnailPublisher) Publish(_ context.Context, job thumbnail.Job) error {
+	if p.order != nil {
+		*p.order = append(*p.order, "thumbnail:publish")
+	}
+	p.jobs = append(p.jobs, job)
+	return p.err
+}
+func (*fakeThumbnailPublisher) Close() error { return nil }
 
 type fakeChecksumIndex struct {
 	existing map[string]string
@@ -278,14 +294,16 @@ func TestUploadStoresBeforePublishing(t *testing.T) {
 	var order []string
 	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo), order: &order}
 	emitter := &fakeEmitter{order: &order}
+	thumbs := &fakeThumbnailPublisher{order: &order}
 	h := &Handler{
 		store:      store,
+		thumbs:     thumbs,
 		checksums:  &fakeChecksumIndex{existing: make(map[string]string), order: &order},
 		events:     emitter,
 		deviceName: "reliquary",
 	}
 
-	req := multipartUploadRequest(t, "report.txt", []byte("hello"))
+	req := multipartUploadRequest(t, "report.png", "image/png", []byte("hello"))
 	res := httptest.NewRecorder()
 	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
 
@@ -293,8 +311,14 @@ func TestUploadStoresBeforePublishing(t *testing.T) {
 		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
 	gotOrder := strings.Join(order, ",")
-	if gotOrder != "storage:put,checksum:add,emit:create" {
+	if gotOrder != "storage:put,checksum:add,thumbnail:publish,emit:create" {
 		t.Fatalf("unexpected operation order: %s", gotOrder)
+	}
+	if len(thumbs.jobs) != 1 ||
+		thumbs.jobs[0].Version != thumbnail.JobVersion ||
+		thumbs.jobs[0].ContentType != "image/png" ||
+		thumbs.jobs[0].Checksum == "" {
+		t.Fatalf("unexpected thumbnail jobs: %+v", thumbs.jobs)
 	}
 }
 
@@ -303,12 +327,13 @@ func TestUploadReturnsServiceUnavailableAfterPublishFailure(t *testing.T) {
 	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
 	h := &Handler{
 		store:      store,
+		thumbs:     &fakeThumbnailPublisher{},
 		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
 		events:     &fakeEmitter{err: publishErr},
 		deviceName: "reliquary",
 	}
 
-	req := multipartUploadRequest(t, "report.txt", []byte("hello"))
+	req := multipartUploadRequest(t, "report.txt", "text/plain", []byte("hello"))
 	res := httptest.NewRecorder()
 	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
 
@@ -331,16 +356,19 @@ func TestDuplicateUploadRepublishesCreate(t *testing.T) {
 			Key:          existingKey,
 			Size:         int64(len(data)),
 			LastModified: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC),
+			ContentType:  "image/png",
 		},
 	}}
+	thumbs := &fakeThumbnailPublisher{}
 	h := &Handler{
 		store:      store,
+		thumbs:     thumbs,
 		checksums:  &fakeChecksumIndex{existing: map[string]string{checksum: existingKey}},
 		events:     emitter,
 		deviceName: "reliquary",
 	}
 
-	req := multipartUploadRequest(t, "report.txt", data)
+	req := multipartUploadRequest(t, "report.png", "image/png", data)
 	res := httptest.NewRecorder()
 	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
 
@@ -349,6 +377,35 @@ func TestDuplicateUploadRepublishesCreate(t *testing.T) {
 	}
 	if len(emitter.events) != 1 || emitter.events[0].FilePath != existingKey {
 		t.Fatalf("unexpected events: %+v", emitter.events)
+	}
+	if len(thumbs.jobs) != 1 || thumbs.jobs[0].FileKey != existingKey {
+		t.Fatalf("unexpected thumbnail jobs: %+v", thumbs.jobs)
+	}
+}
+
+func TestUploadReturnsServiceUnavailableAfterThumbnailPublishFailure(t *testing.T) {
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	emitter := &fakeEmitter{}
+	h := &Handler{
+		store:      store,
+		thumbs:     &fakeThumbnailPublisher{err: errors.New("thumbnail broker unavailable")},
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "report.png", "image/png", []byte("hello"))
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(store.objects) != 1 {
+		t.Fatalf("stored objects=%d, want 1", len(store.objects))
+	}
+	if len(emitter.events) != 0 {
+		t.Fatalf("create event published after thumbnail failure: %+v", emitter.events)
 	}
 }
 
@@ -379,7 +436,12 @@ func TestDeleteRemovesBeforePublishing(t *testing.T) {
 	}
 }
 
-func multipartUploadRequest(t *testing.T, filename string, data []byte) *http.Request {
+func multipartUploadRequest(
+	t *testing.T,
+	filename string,
+	contentType string,
+	data []byte,
+) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -394,6 +456,16 @@ func multipartUploadRequest(t *testing.T, filename string, data []byte) *http.Re
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	// multipart.CreateFormFile defaults to application/octet-stream. Replace
+	// the part header content type for handler behavior tests.
+	raw := strings.Replace(
+		body.String(),
+		"Content-Type: application/octet-stream",
+		"Content-Type: "+contentType,
+		1,
+	)
+	req = httptest.NewRequest(http.MethodPost, "/api/upload", strings.NewReader(raw))
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
 }

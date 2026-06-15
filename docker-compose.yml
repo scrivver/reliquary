@@ -27,10 +27,14 @@ services:
       EVENTS_ENABLED: ${EVENTS_ENABLED:-true}
       EVENT_QUEUE: ${EVENT_QUEUE:-engram.ingest}
       EVENT_DEVICE_NAME: ${EVENT_DEVICE_NAME:-reliquary}
+      THUMBNAIL_QUEUE: ${THUMBNAIL_QUEUE:-reliquary.thumbnail}
+      THUMBNAIL_DEAD_QUEUE: ${THUMBNAIL_DEAD_QUEUE:-reliquary.thumbnail.dead}
+      THUMBNAIL_PREFETCH: ${THUMBNAIL_PREFETCH:-1}
+      THUMBNAIL_CONCURRENCY: ${THUMBNAIL_CONCURRENCY:-4}
+      THUMBNAIL_MAX_ATTEMPTS: ${THUMBNAIL_MAX_ATTEMPTS:-5}
       AUTH_USERNAME: ${AUTH_USERNAME:-admin}
       AUTH_PASSWORD: ${AUTH_PASSWORD:-admin}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      THUMBNAIL_WORKERS: ${THUMBNAIL_WORKERS:-4}
     volumes:
       - minio_data:/data/minio
 

@@ -13,216 +13,142 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/minio/minio-go/v7"
 	"golang.org/x/image/draw"
 
 	"reliquary-be/storage"
+	"reliquary-be/thumbnail"
 )
 
 const (
 	thumbWidth   = 300
 	thumbQuality = 80
-	jobQueueSize = 100
 )
 
-type thumbnailJob struct {
-	fileKey     string
-	contentType string
+type thumbnailStore interface {
+	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
+	PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string, userMeta map[string]string) error
+	DeleteObject(ctx context.Context, key string) error
+	StatObject(ctx context.Context, key string) (minio.ObjectInfo, error)
 }
 
-type ThumbnailWorker struct {
-	store *storage.Client
-	jobs  chan thumbnailJob
+// ThumbnailProcessor synchronously renders one durable thumbnail job.
+type ThumbnailProcessor struct {
+	store thumbnailStore
 }
 
-func NewThumbnailWorker(store *storage.Client, numWorkers int) *ThumbnailWorker {
-	return &ThumbnailWorker{
-		store: store,
-		jobs:  make(chan thumbnailJob, jobQueueSize),
+func NewThumbnailProcessor(store *storage.Client) *ThumbnailProcessor {
+	return &ThumbnailProcessor{store: store}
+}
+
+func (p *ThumbnailProcessor) Process(ctx context.Context, job thumbnail.Job) error {
+	if err := job.Validate(); err != nil {
+		return thumbnail.Discard(err)
 	}
-}
-
-// Start launches the worker goroutines. Call this once on startup.
-func (w *ThumbnailWorker) Start(ctx context.Context, numWorkers int) {
-	slog.Info("thumbnail worker pool started", "workers", numWorkers, "queue_size", jobQueueSize)
-	for i := range numWorkers {
-		go func(id int) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case job := <-w.jobs:
-					if err := w.generateThumbnail(ctx, job.fileKey, job.contentType); err != nil {
-						slog.Error("thumbnail generation failed", "worker", id, "key", job.fileKey, "error", err)
-					}
-				}
-			}
-		}(i)
+	if !thumbnail.SupportedContentType(job.ContentType) {
+		return thumbnail.Discard(fmt.Errorf("unsupported content type %q", job.ContentType))
 	}
-}
 
-// Submit queues a thumbnail generation job. Non-blocking; drops the job if the queue is full.
-func (w *ThumbnailWorker) Submit(fileKey, contentType string) {
-	select {
-	case w.jobs <- thumbnailJob{fileKey: fileKey, contentType: contentType}:
-		slog.Debug("thumbnail job queued", "key", fileKey)
-	default:
-		slog.Warn("thumbnail job queue full, dropping", "key", fileKey)
-	}
-}
-
-// GenerateThumbnail creates a thumbnail synchronously.
-func (w *ThumbnailWorker) GenerateThumbnail(ctx context.Context, fileKey, contentType string) error {
-	return w.generateThumbnail(ctx, fileKey, contentType)
-}
-
-func (w *ThumbnailWorker) generateThumbnail(ctx context.Context, fileKey, contentType string) error {
-	thumbKey := fileToThumbKey(fileKey)
+	thumbKey := fileToThumbKey(job.FileKey)
 	if thumbKey == "" {
-		return fmt.Errorf("cannot derive thumbnail key from %q", fileKey)
+		return thumbnail.Discard(fmt.Errorf("cannot derive thumbnail key from %q", job.FileKey))
 	}
 
-	if strings.HasPrefix(contentType, "image/") {
-		return w.generateImageThumbnail(ctx, fileKey, thumbKey)
+	matches, err := p.sourceMatches(ctx, job)
+	if err != nil {
+		return err
 	}
-	if strings.HasPrefix(contentType, "video/") {
-		return w.generateVideoThumbnail(ctx, fileKey, thumbKey)
-	}
-	if contentType == "application/pdf" {
-		return w.generatePDFThumbnail(ctx, fileKey, thumbKey)
+	if !matches {
+		return thumbnail.Discard(fmt.Errorf("source is missing or checksum changed"))
 	}
 
-	slog.Info("skipping thumbnail for unsupported type", "key", fileKey, "content_type", contentType)
+	if stat, err := p.store.StatObject(ctx, thumbKey); err == nil {
+		if metadataValue(stat.UserMetadata, "Source-Checksum") == job.Checksum {
+			slog.Debug("thumbnail already current", "key", thumbKey)
+			return nil
+		}
+	} else if !storage.IsObjectNotFound(err) {
+		return fmt.Errorf("stat thumbnail %q: %w", thumbKey, err)
+	}
+
+	data, err := p.generate(ctx, job.FileKey, job.ContentType)
+	if err != nil {
+		return err
+	}
+	meta := map[string]string{"Source-Checksum": job.Checksum}
+	if err := p.store.PutObject(
+		ctx,
+		thumbKey,
+		bytes.NewReader(data),
+		int64(len(data)),
+		"image/jpeg",
+		meta,
+	); err != nil {
+		return fmt.Errorf("put thumbnail %q: %w", thumbKey, err)
+	}
+
+	matches, err = p.sourceMatches(ctx, job)
+	if err != nil {
+		p.store.DeleteObject(ctx, thumbKey)
+		return err
+	}
+	if !matches {
+		if err := p.store.DeleteObject(ctx, thumbKey); err != nil {
+			return fmt.Errorf("delete stale thumbnail %q: %w", thumbKey, err)
+		}
+		return thumbnail.Discard(fmt.Errorf("source changed during generation"))
+	}
+
+	slog.Info("thumbnail generated", "key", thumbKey, "size", len(data))
 	return nil
 }
 
-func (w *ThumbnailWorker) generateImageThumbnail(ctx context.Context, fileKey, thumbKey string) error {
-	obj, err := w.store.GetObject(ctx, fileKey)
+func (p *ThumbnailProcessor) sourceMatches(
+	ctx context.Context,
+	job thumbnail.Job,
+) (bool, error) {
+	stat, err := p.store.StatObject(ctx, job.FileKey)
 	if err != nil {
-		return fmt.Errorf("get object %q: %w", fileKey, err)
+		if storage.IsObjectNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat source %q: %w", job.FileKey, err)
+	}
+	return metadataValue(stat.UserMetadata, "Checksum") == job.Checksum, nil
+}
+
+func (p *ThumbnailProcessor) generate(
+	ctx context.Context,
+	fileKey string,
+	contentType string,
+) ([]byte, error) {
+	switch {
+	case strings.HasPrefix(contentType, "image/"):
+		return p.generateImageThumbnail(ctx, fileKey)
+	case strings.HasPrefix(contentType, "video/"):
+		return p.generateVideoThumbnail(ctx, fileKey)
+	case contentType == "application/pdf":
+		return p.generatePDFThumbnail(ctx, fileKey)
+	default:
+		return nil, thumbnail.Discard(fmt.Errorf("unsupported content type %q", contentType))
+	}
+}
+
+func (p *ThumbnailProcessor) generateImageThumbnail(
+	ctx context.Context,
+	fileKey string,
+) ([]byte, error) {
+	obj, err := p.store.GetObject(ctx, fileKey)
+	if err != nil {
+		return nil, fmt.Errorf("get object %q: %w", fileKey, err)
 	}
 	defer obj.Close()
 
 	src, _, err := image.Decode(obj)
 	if err != nil {
-		return fmt.Errorf("decode image %q: %w", fileKey, err)
+		return nil, fmt.Errorf("decode image %q: %w", fileKey, err)
 	}
 
-	return w.resizeAndStore(ctx, thumbKey, src)
-}
-
-func (w *ThumbnailWorker) generateVideoThumbnail(ctx context.Context, fileKey, thumbKey string) error {
-	// Download video to a temp file for ffmpeg.
-	obj, err := w.store.GetObject(ctx, fileKey)
-	if err != nil {
-		return fmt.Errorf("get object %q: %w", fileKey, err)
-	}
-	defer obj.Close()
-
-	tmpIn, err := os.CreateTemp("", "reliquary-video-*")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer os.Remove(tmpIn.Name())
-	defer tmpIn.Close()
-
-	if _, err := io.Copy(tmpIn, obj); err != nil {
-		return fmt.Errorf("download video: %w", err)
-	}
-	tmpIn.Close()
-
-	// Extract first frame with ffmpeg.
-	tmpOut, err := os.CreateTemp("", "reliquary-frame-*.jpg")
-	if err != nil {
-		return fmt.Errorf("create temp output: %w", err)
-	}
-	defer os.Remove(tmpOut.Name())
-	tmpOut.Close()
-
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-i", tmpIn.Name(),
-		"-vframes", "1",
-		"-vf", fmt.Sprintf("scale=%d:-1", thumbWidth),
-		"-q:v", "2",
-		"-y",
-		tmpOut.Name(),
-	)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("ffmpeg extract frame: %w\noutput: %s", err, output)
-	}
-
-	// Read the frame and upload.
-	frameData, err := os.ReadFile(tmpOut.Name())
-	if err != nil {
-		return fmt.Errorf("read frame: %w", err)
-	}
-
-	if err := w.store.PutObject(ctx, thumbKey, bytes.NewReader(frameData), int64(len(frameData)), "image/jpeg", nil); err != nil {
-		return fmt.Errorf("put video thumbnail %q: %w", thumbKey, err)
-	}
-
-	slog.Info("video thumbnail generated", "key", thumbKey, "size", len(frameData))
-	return nil
-}
-
-func (w *ThumbnailWorker) generatePDFThumbnail(ctx context.Context, fileKey, thumbKey string) error {
-	// Download PDF to a temp file for pdftoppm.
-	obj, err := w.store.GetObject(ctx, fileKey)
-	if err != nil {
-		return fmt.Errorf("get object %q: %w", fileKey, err)
-	}
-	defer obj.Close()
-
-	tmpIn, err := os.CreateTemp("", "reliquary-pdf-*.pdf")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	defer os.Remove(tmpIn.Name())
-	defer tmpIn.Close()
-
-	if _, err := io.Copy(tmpIn, obj); err != nil {
-		return fmt.Errorf("download pdf: %w", err)
-	}
-	tmpIn.Close()
-
-	// Render first page with pdftoppm.
-	tmpOutPrefix, err := os.CreateTemp("", "reliquary-pdfthumb-")
-	if err != nil {
-		return fmt.Errorf("create temp output: %w", err)
-	}
-	tmpOutBase := tmpOutPrefix.Name()
-	tmpOutPrefix.Close()
-	os.Remove(tmpOutBase)
-
-	cmd := exec.CommandContext(ctx, "pdftoppm",
-		"-jpeg",
-		"-f", "1",
-		"-l", "1",
-		"-scale-to", fmt.Sprintf("%d", thumbWidth),
-		tmpIn.Name(),
-		tmpOutBase,
-	)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("pdftoppm render: %w\noutput: %s", err, output)
-	}
-
-	// pdftoppm outputs as {prefix}-{page}.jpg (e.g., /tmp/reliquary-pdfthumb-123-1.jpg)
-	outFile := tmpOutBase + "-1.jpg"
-	defer os.Remove(outFile)
-
-	pageData, err := os.ReadFile(outFile)
-	if err != nil {
-		return fmt.Errorf("read pdf page: %w", err)
-	}
-
-	if err := w.store.PutObject(ctx, thumbKey, bytes.NewReader(pageData), int64(len(pageData)), "image/jpeg", nil); err != nil {
-		return fmt.Errorf("put pdf thumbnail %q: %w", thumbKey, err)
-	}
-
-	slog.Info("pdf thumbnail generated", "key", thumbKey, "size", len(pageData))
-	return nil
-}
-
-func (w *ThumbnailWorker) resizeAndStore(ctx context.Context, thumbKey string, src image.Image) error {
 	bounds := src.Bounds()
 	origW := bounds.Dx()
 	origH := bounds.Dy()
@@ -240,18 +166,122 @@ func (w *ThumbnailWorker) resizeAndStore(ctx context.Context, thumbKey string, s
 
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: thumbQuality}); err != nil {
-		return fmt.Errorf("encode jpeg: %w", err)
+		return nil, fmt.Errorf("encode jpeg: %w", err)
 	}
-
-	if err := w.store.PutObject(ctx, thumbKey, &buf, int64(buf.Len()), "image/jpeg", nil); err != nil {
-		return fmt.Errorf("put thumbnail %q: %w", thumbKey, err)
-	}
-
-	slog.Info("thumbnail generated", "key", thumbKey, "size", buf.Len())
-	return nil
+	return buf.Bytes(), nil
 }
 
-// fileToThumbKey converts "files/<user>/2026/03/img.jpg" to "thumbs/<user>/2026/03/img.jpg".
+func (p *ThumbnailProcessor) generateVideoThumbnail(
+	ctx context.Context,
+	fileKey string,
+) ([]byte, error) {
+	obj, err := p.store.GetObject(ctx, fileKey)
+	if err != nil {
+		return nil, fmt.Errorf("get object %q: %w", fileKey, err)
+	}
+	defer obj.Close()
+
+	tmpIn, err := os.CreateTemp("", "reliquary-video-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpIn.Name())
+	defer tmpIn.Close()
+
+	if _, err := io.Copy(tmpIn, obj); err != nil {
+		return nil, fmt.Errorf("download video: %w", err)
+	}
+	tmpIn.Close()
+
+	tmpOut, err := os.CreateTemp("", "reliquary-frame-*.jpg")
+	if err != nil {
+		return nil, fmt.Errorf("create temp output: %w", err)
+	}
+	defer os.Remove(tmpOut.Name())
+	tmpOut.Close()
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", tmpIn.Name(),
+		"-vframes", "1",
+		"-vf", fmt.Sprintf("scale=%d:-1", thumbWidth),
+		"-q:v", "2",
+		"-y",
+		tmpOut.Name(),
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg extract frame: %w\noutput: %s", err, output)
+	}
+
+	frameData, err := os.ReadFile(tmpOut.Name())
+	if err != nil {
+		return nil, fmt.Errorf("read frame: %w", err)
+	}
+	return frameData, nil
+}
+
+func (p *ThumbnailProcessor) generatePDFThumbnail(
+	ctx context.Context,
+	fileKey string,
+) ([]byte, error) {
+	obj, err := p.store.GetObject(ctx, fileKey)
+	if err != nil {
+		return nil, fmt.Errorf("get object %q: %w", fileKey, err)
+	}
+	defer obj.Close()
+
+	tmpIn, err := os.CreateTemp("", "reliquary-pdf-*.pdf")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpIn.Name())
+	defer tmpIn.Close()
+
+	if _, err := io.Copy(tmpIn, obj); err != nil {
+		return nil, fmt.Errorf("download pdf: %w", err)
+	}
+	tmpIn.Close()
+
+	tmpOutPrefix, err := os.CreateTemp("", "reliquary-pdfthumb-")
+	if err != nil {
+		return nil, fmt.Errorf("create temp output: %w", err)
+	}
+	tmpOutBase := tmpOutPrefix.Name()
+	tmpOutPrefix.Close()
+	os.Remove(tmpOutBase)
+
+	cmd := exec.CommandContext(ctx, "pdftoppm",
+		"-jpeg",
+		"-f", "1",
+		"-l", "1",
+		"-scale-to", fmt.Sprintf("%d", thumbWidth),
+		tmpIn.Name(),
+		tmpOutBase,
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("pdftoppm render: %w\noutput: %s", err, output)
+	}
+
+	outFile := tmpOutBase + "-1.jpg"
+	defer os.Remove(outFile)
+
+	pageData, err := os.ReadFile(outFile)
+	if err != nil {
+		return nil, fmt.Errorf("read pdf page: %w", err)
+	}
+	return pageData, nil
+}
+
+func metadataValue(metadata map[string]string, key string) string {
+	for metadataKey, value := range metadata {
+		if strings.EqualFold(metadataKey, key) {
+			return value
+		}
+	}
+	return ""
+}
+
+// fileToThumbKey converts "files/<user>/2026/03/img.jpg" to
+// "thumbs/<user>/2026/03/img.jpg".
 func fileToThumbKey(fileKey string) string {
 	const filesSegment = "files/"
 	if !strings.HasPrefix(fileKey, filesSegment) {

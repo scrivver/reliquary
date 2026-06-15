@@ -32,14 +32,18 @@ type Config struct {
 	OIDCClientID      string // expected aud claim
 	OIDCUsernameClaim string // JWT claim for username (default: preferred_username)
 
-	// Workers
-	ThumbnailWorkers int
-
 	// File events
 	EventsEnabled   bool
 	RabbitMQURL     string
 	EventQueue      string
 	EventDeviceName string
+
+	// Thumbnail jobs
+	ThumbnailQueue       string
+	ThumbnailDeadQueue   string
+	ThumbnailPrefetch    int
+	ThumbnailConcurrency int
+	ThumbnailMaxAttempts int
 }
 
 func Load() (*Config, error) {
@@ -67,12 +71,16 @@ func Load() (*Config, error) {
 		OIDCClientID:      envOr("OIDC_CLIENT_ID", ""),
 		OIDCUsernameClaim: envOr("OIDC_USERNAME_CLAIM", "preferred_username"),
 
-		ThumbnailWorkers: envOrInt("THUMBNAIL_WORKERS", 4),
-
 		EventsEnabled:   envOrBool("EVENTS_ENABLED", true),
 		RabbitMQURL:     envOr("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672"),
 		EventQueue:      envOr("EVENT_QUEUE", "engram.ingest"),
 		EventDeviceName: envOr("EVENT_DEVICE_NAME", "reliquary"),
+
+		ThumbnailQueue:       envOr("THUMBNAIL_QUEUE", "reliquary.thumbnail"),
+		ThumbnailDeadQueue:   envOr("THUMBNAIL_DEAD_QUEUE", "reliquary.thumbnail.dead"),
+		ThumbnailPrefetch:    envOrInt("THUMBNAIL_PREFETCH", 1),
+		ThumbnailConcurrency: envOrInt("THUMBNAIL_CONCURRENCY", 4),
+		ThumbnailMaxAttempts: envOrInt("THUMBNAIL_MAX_ATTEMPTS", 5),
 	}
 
 	return cfg, nil

@@ -22,7 +22,7 @@ import (
 	"reliquary-be/config"
 	"reliquary-be/event"
 	"reliquary-be/storage"
-	"reliquary-be/worker"
+	"reliquary-be/thumbnail"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -46,7 +46,7 @@ type checksumIndex interface {
 
 type Handler struct {
 	store        fileStore
-	thumbs       *worker.ThumbnailWorker
+	thumbs       thumbnail.Publisher
 	checksums    checksumIndex
 	events       event.Emitter
 	deviceName   string
@@ -56,7 +56,7 @@ type Handler struct {
 func New(
 	cfg *config.Config,
 	store *storage.Client,
-	thumbs *worker.ThumbnailWorker,
+	thumbs thumbnail.Publisher,
 	checksums *storage.ChecksumIndex,
 	events event.Emitter,
 ) *Handler {
@@ -166,9 +166,24 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Check for duplicate by checksum.
 	if existingKey := h.checksums.Lookup(username, checksum); existingKey != "" {
 		slog.Info("duplicate detected", "checksum", checksum, "existing_key", existingKey)
-		if err := h.emitCreate(r.Context(), existingKey, checksum); err != nil {
-			slog.Error("failed to publish duplicate file event", "key", existingKey, "error", err)
-			httpError(w, "file exists but its event could not be published; retry upload", http.StatusServiceUnavailable)
+		stat, err := h.store.StatObject(r.Context(), existingKey)
+		if err != nil {
+			slog.Error("failed to stat duplicate file", "key", existingKey, "error", err)
+			httpError(w, "failed to inspect existing file", http.StatusInternalServerError)
+			return
+		}
+		existingContentType := stat.ContentType
+		if existingContentType == "" {
+			existingContentType = contentType
+		}
+		if err := h.publishUploadEffects(
+			r.Context(),
+			existingKey,
+			existingContentType,
+			checksum,
+		); err != nil {
+			slog.Error("failed to republish upload effects", "key", existingKey, "error", err)
+			httpError(w, "file exists but background work could not be published; retry upload", http.StatusServiceUnavailable)
 			return
 		}
 		jsonResponse(w, UploadResponse{Key: existingKey, Size: int64(len(data)), Duplicate: true})
@@ -194,13 +209,9 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update checksum index", "error", err)
 	}
 
-	if hasThumbnailSupport(contentType) {
-		h.thumbs.Submit(fileKey, contentType)
-	}
-
-	if err := h.emitCreate(r.Context(), fileKey, checksum); err != nil {
-		slog.Error("failed to publish file event", "key", fileKey, "error", err)
-		httpError(w, "file stored but its event could not be published; retry upload", http.StatusServiceUnavailable)
+	if err := h.publishUploadEffects(r.Context(), fileKey, contentType, checksum); err != nil {
+		slog.Error("failed to publish upload effects", "key", fileKey, "error", err)
+		httpError(w, "file stored but background work could not be published; retry upload", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -362,6 +373,28 @@ func (h *Handler) emitCreate(ctx context.Context, key, checksum string) error {
 		DeviceName:  h.deviceName,
 		StorageType: event.StorageS3,
 	})
+}
+
+func (h *Handler) publishUploadEffects(
+	ctx context.Context,
+	key string,
+	contentType string,
+	checksum string,
+) error {
+	if thumbnail.SupportedContentType(contentType) {
+		if err := h.thumbs.Publish(ctx, thumbnail.Job{
+			Version:     thumbnail.JobVersion,
+			FileKey:     key,
+			ContentType: contentType,
+			Checksum:    checksum,
+		}); err != nil {
+			return fmt.Errorf("publish thumbnail job: %w", err)
+		}
+	}
+	if err := h.emitCreate(ctx, key, checksum); err != nil {
+		return fmt.Errorf("publish create event: %w", err)
+	}
+	return nil
 }
 
 // --- Admin handlers ---

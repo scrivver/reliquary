@@ -136,11 +136,15 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 | `AUTH_MODE` | `full` | Auth mode: `full`, `proxy`, or `none` (see below) |
 | `AUTH_USERNAME` | `admin` | Initial admin / default user |
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
-| `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
 | `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Broker used for Engram file events |
 | `EVENT_QUEUE` | `engram.ingest` | Predeclared RabbitMQ queue/routing key |
 | `EVENT_DEVICE_NAME` | `reliquary` | Producer name in canonical file events |
 | `EVENTS_ENABLED` | `true` | Set `false` only for standalone operation without Engram |
+| `THUMBNAIL_QUEUE` | `reliquary.thumbnail` | Durable thumbnail job queue |
+| `THUMBNAIL_DEAD_QUEUE` | `reliquary.thumbnail.dead` | Exhausted/invalid job queue |
+| `THUMBNAIL_PREFETCH` | `1` | Unacked jobs reserved per worker slot |
+| `THUMBNAIL_CONCURRENCY` | `4` | Concurrent jobs per worker process |
+| `THUMBNAIL_MAX_ATTEMPTS` | `5` | Processing attempts before dead-lettering |
 
 Uploads and deletes publish canonical persistent messages after the S3 mutation.
 Delivery is at least once. If RabbitMQ does not confirm an event, the API returns
@@ -271,10 +275,12 @@ All configuration is via environment variables in `.env`:
 | `AUTH_USERNAME` | `admin` | Initial admin username |
 | `AUTH_PASSWORD` | `admin` | Initial admin password |
 | `JWT_SECRET` | — | JWT signing secret (must change for production) |
-| `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
 | `EVENT_QUEUE` | `engram.ingest` | RabbitMQ queue/routing key |
 | `EVENT_DEVICE_NAME` | `reliquary` | Event producer name |
 | `EVENTS_ENABLED` | `true` | Explicitly disable Engram events |
+| `THUMBNAIL_QUEUE` | `reliquary.thumbnail` | Durable thumbnail queue |
+| `THUMBNAIL_CONCURRENCY` | `4` | Worker process concurrency |
+| `THUMBNAIL_MAX_ATTEMPTS` | `5` | Attempts before dead-lettering |
 
 ### Restoring Data From Older Releases
 
@@ -304,13 +310,15 @@ overwrites active objects, and rebuilds per-user checksum indexes.
 
 ### Architecture
 
-The application container runs three processes managed by the entrypoint script:
+The all-in-one application container runs four processes managed by the entrypoint:
 - **MinIO** — object storage on `127.0.0.1:9000` (internal only)
 - **Go backend** — API server on a unix socket
+- **Thumbnail worker** — consumes durable RabbitMQ jobs
 - **Caddy** — reverse proxy on `:2080`, serves Flutter web build, routes `/api/*` and `/storage/*`
 
-Compose also runs RabbitMQ with the durable `engram.ingest` queue. MinIO and
-RabbitMQ data are persisted via `minio_data` and `rabbitmq_data`.
+Compose also runs RabbitMQ with durable `engram.ingest`,
+`reliquary.thumbnail`, and `reliquary.thumbnail.dead` queues. MinIO and RabbitMQ
+data are persisted via `minio_data` and `rabbitmq_data`.
 
 ### Mobile Apps
 

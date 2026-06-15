@@ -33,6 +33,9 @@ source load-infra-env
 # Backend window.
 start-backend
 
+# Thumbnail worker window.
+start-thumbnail-worker
+
 # Frontend window.
 start-frontend
 

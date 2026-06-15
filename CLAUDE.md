@@ -113,11 +113,15 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | `AUTH_USERNAME` | `admin` | Initial admin username / default user for proxy/none modes |
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret (full mode only) |
-| `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail generation workers |
 | `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Engram event broker |
 | `EVENT_QUEUE` | `engram.ingest` | Predeclared queue and routing key |
 | `EVENT_DEVICE_NAME` | `reliquary` | Canonical event producer name |
 | `EVENTS_ENABLED` | `true` | Explicit standalone opt-out |
+| `THUMBNAIL_QUEUE` | `reliquary.thumbnail` | Durable thumbnail job queue |
+| `THUMBNAIL_DEAD_QUEUE` | `reliquary.thumbnail.dead` | Invalid/exhausted jobs |
+| `THUMBNAIL_PREFETCH` | `1` | Unacked jobs per worker slot |
+| `THUMBNAIL_CONCURRENCY` | `4` | Concurrent jobs per worker process |
+| `THUMBNAIL_MAX_ATTEMPTS` | `5` | Attempts before dead-lettering |
 
 ## Key Design Decisions
 
@@ -126,7 +130,9 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Multi-user with app-level auth**: Users managed via JSON file in MinIO (`admin/users.json`) with bcrypt hashing. Each user gets an isolated namespace (`{username}/files/`, `{username}/thumbs/`, etc.). No MinIO IAM — the backend is the single gatekeeper.
 - **Deduplication**: SHA-256 checksum computed on upload. Per-user checksum index stored in MinIO. Duplicates return the existing key without re-uploading.
 - **Metadata on objects**: Checksum, upload date, and original filename stored as MinIO user metadata (X-Amz-Meta-*). No external database needed.
-- **Bounded thumbnail generation**: Worker pool with configurable concurrency (default 4). Jobs queued in a channel (buffer 100) with backpressure. Supports image resize and ffmpeg video frame extraction.
+- **Durable thumbnail generation**: The API publishes confirmed jobs to
+  `reliquary.thumbnail`; the standalone worker consumes with manual
+  acknowledgements, bounded concurrency, retries, and dead-lettering.
 - **Ephemeral ports**: MinIO binds to random available ports to avoid conflicts. Other services discover ports by reading the port files.
 - **Nix store paths in process-compose**: Commands in `minio.nix` use `pkgs.writeShellScript`, so the generated YAML references `/nix/store/...` paths directly. The YAML is only valid inside the dev shell.
 - **MinIO credentials**: Default dev credentials are `minioadmin/minioadmin`. Default bucket is `reliquary`.
@@ -167,15 +173,17 @@ docker compose up -d    # Available at http://localhost:2080
 
 ### Nix Build Targets
 
-- `nix build .#backend` — Go backend and `restore-archive` binaries with ffmpeg in PATH
+- `nix build .#backend` — API, thumbnail worker, and restore binaries
 - `nix build .#container` — OCI image (reliquary.tar.gz)
+- `nix build .#thumbnail-worker-container` — dedicated thumbnail worker image
 
 ### Container Architecture
 
-Application container running three processes:
+All-in-one application container running four processes:
 - **MinIO** (`127.0.0.1:9000`) — object storage, internal only
 - **Go backend** (unix socket) — API server
+- **Thumbnail worker** — durable RabbitMQ consumer
 - **Caddy** (`:2080`) — reverse proxy + static file server for Flutter web
 
-Compose adds RabbitMQ with the durable `engram.ingest` queue. MinIO and RabbitMQ
-use separate persistent volumes.
+Compose adds RabbitMQ with Engram and thumbnail queues. MinIO and RabbitMQ use
+separate persistent volumes.

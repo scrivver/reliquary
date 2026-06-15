@@ -17,7 +17,7 @@ import (
 	"reliquary-be/event"
 	"reliquary-be/handler"
 	"reliquary-be/storage"
-	"reliquary-be/worker"
+	"reliquary-be/thumbnail"
 )
 
 func main() {
@@ -80,8 +80,13 @@ func main() {
 	}
 	defer events.Close()
 
-	thumbs := worker.NewThumbnailWorker(store, cfg.ThumbnailWorkers)
-	thumbs.Start(context.Background(), cfg.ThumbnailWorkers)
+	thumbs, err := thumbnail.NewRabbitMQPublisher(cfg.RabbitMQURL, cfg.ThumbnailQueue)
+	if err != nil {
+		slog.Error("failed to initialize thumbnail job publisher", "error", err)
+		os.Exit(1)
+	}
+	defer thumbs.Close()
+	slog.Info("thumbnail job publisher ready", "queue", cfg.ThumbnailQueue)
 
 	h := handler.New(cfg, store, thumbs, checksums, events)
 

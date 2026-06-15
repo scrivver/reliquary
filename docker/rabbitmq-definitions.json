@@ -28,6 +28,20 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {}
+    },
+    {
+      "name": "reliquary.thumbnail",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "reliquary.thumbnail.dead",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
     }
   ],
   "bindings": [
@@ -37,6 +51,22 @@
       "destination": "engram.ingest",
       "destination_type": "queue",
       "routing_key": "engram.ingest",
+      "arguments": {}
+    },
+    {
+      "source": "amq.direct",
+      "vhost": "/",
+      "destination": "reliquary.thumbnail",
+      "destination_type": "queue",
+      "routing_key": "reliquary.thumbnail",
+      "arguments": {}
+    },
+    {
+      "source": "amq.direct",
+      "vhost": "/",
+      "destination": "reliquary.thumbnail.dead",
+      "destination_type": "queue",
+      "routing_key": "reliquary.thumbnail.dead",
       "arguments": {}
     }
   ]

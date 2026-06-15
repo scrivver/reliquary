@@ -16,6 +16,13 @@ func TestEventsEnabledByDefault(t *testing.T) {
 	if cfg.EventQueue != "engram.ingest" || cfg.EventDeviceName != "reliquary" {
 		t.Fatalf("unexpected event config: %+v", cfg)
 	}
+	if cfg.ThumbnailQueue != "reliquary.thumbnail" ||
+		cfg.ThumbnailDeadQueue != "reliquary.thumbnail.dead" ||
+		cfg.ThumbnailPrefetch != 1 ||
+		cfg.ThumbnailConcurrency != 4 ||
+		cfg.ThumbnailMaxAttempts != 5 {
+		t.Fatalf("unexpected thumbnail config: %+v", cfg)
+	}
 }
 
 func TestEventsCanBeExplicitlyDisabled(t *testing.T) {

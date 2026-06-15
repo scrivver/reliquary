@@ -7,13 +7,17 @@ pkgs.buildGoModule {
   src = ../backend;
 
   vendorHash = "sha256-/OGWqjb9QTneTfGT4fz2LBIAGqMIEVuLQkbnx+OVrSI=";
-  subPackages = [ "." "cmd/restore-archive" ];
+  subPackages = [
+    "."
+    "cmd/reliquary-thumbnail-worker"
+    "cmd/restore-archive"
+  ];
 
-  # ffmpeg and poppler-utils needed at runtime for thumbnail generation
+  # Thumbnail worker runtime tools.
   nativeBuildInputs = [ pkgs.makeWrapper ];
 
   postInstall = ''
-    wrapProgram $out/bin/reliquary-be \
+    wrapProgram $out/bin/reliquary-thumbnail-worker \
       --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.ffmpeg pkgs.poppler-utils ]}
   '';
 

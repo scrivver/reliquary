@@ -15,21 +15,29 @@ let
       write = ".*";
       read = ".*";
     } ];
-    queues = [ {
-      name = "engram.ingest";
+    queues = map (name: {
+      inherit name;
       vhost = "/";
       durable = true;
       auto_delete = false;
       arguments = {};
-    } ];
-    bindings = [ {
+    }) [
+      "engram.ingest"
+      "reliquary.thumbnail"
+      "reliquary.thumbnail.dead"
+    ];
+    bindings = map (name: {
       source = "amq.direct";
       vhost = "/";
-      destination = "engram.ingest";
+      destination = name;
       destination_type = "queue";
-      routing_key = "engram.ingest";
+      routing_key = name;
       arguments = {};
-    } ];
+    }) [
+      "engram.ingest"
+      "reliquary.thumbnail"
+      "reliquary.thumbnail.dead"
+    ];
   };
   definitionsFile = pkgs.writeText "rabbitmq-definitions.json" definitions;
 in
