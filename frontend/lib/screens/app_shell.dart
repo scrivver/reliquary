@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'admin_screen.dart';
-import 'archive_screen.dart';
 import 'gallery_screen.dart';
 import 'settings_screen.dart';
 import 'stats_screen.dart';
@@ -25,7 +24,10 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _apiService = ApiService(widget.authService, onUnauthorized: _onUnauthorized);
+    _apiService = ApiService(
+      widget.authService,
+      onUnauthorized: _onUnauthorized,
+    );
     _loadRole();
   }
 
@@ -39,21 +41,35 @@ class _AppShellState extends State<AppShell> {
   }
 
   List<_NavItem> get _navItems => [
-        const _NavItem(icon: Icons.folder_outlined, selectedIcon: Icons.folder, label: 'FILES'),
-        const _NavItem(icon: Icons.archive_outlined, selectedIcon: Icons.archive, label: 'ARCHIVE'),
-        const _NavItem(icon: Icons.bar_chart_outlined, selectedIcon: Icons.bar_chart, label: 'STATUS'),
-        if (_isAdmin)
-          const _NavItem(icon: Icons.people_outlined, selectedIcon: Icons.people, label: 'USERS'),
-        const _NavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'CONFIG'),
-      ];
+    const _NavItem(
+      icon: Icons.folder_outlined,
+      selectedIcon: Icons.folder,
+      label: 'FILES',
+    ),
+    const _NavItem(
+      icon: Icons.bar_chart_outlined,
+      selectedIcon: Icons.bar_chart,
+      label: 'STATUS',
+    ),
+    if (_isAdmin)
+      const _NavItem(
+        icon: Icons.people_outlined,
+        selectedIcon: Icons.people,
+        label: 'USERS',
+      ),
+    const _NavItem(
+      icon: Icons.settings_outlined,
+      selectedIcon: Icons.settings,
+      label: 'CONFIG',
+    ),
+  ];
 
   List<Widget> get _screens => [
-        GalleryScreen(authService: widget.authService, apiService: _apiService),
-        ArchiveScreen(apiService: _apiService),
-        StatsScreen(apiService: _apiService),
-        if (_isAdmin) AdminScreen(apiService: _apiService),
-        SettingsScreen(apiService: _apiService, authService: widget.authService),
-      ];
+    GalleryScreen(authService: widget.authService, apiService: _apiService),
+    StatsScreen(apiService: _apiService),
+    if (_isAdmin) AdminScreen(apiService: _apiService),
+    SettingsScreen(apiService: _apiService, authService: widget.authService),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -88,10 +104,7 @@ class _AppShellState extends State<AppShell> {
             ),
             const VerticalDivider(thickness: 1, width: 1),
             Expanded(
-              child: IndexedStack(
-                index: _selectedIndex,
-                children: _screens,
-              ),
+              child: IndexedStack(index: _selectedIndex, children: _screens),
             ),
           ],
         ),
@@ -99,10 +112,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),

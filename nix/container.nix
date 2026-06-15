@@ -139,12 +139,11 @@ pkgs.dockerTools.buildLayeredImage {
       "MINIO_ROOT_USER=minioadmin"
       "MINIO_ROOT_PASSWORD=minioadmin"
       "MINIO_BUCKET=reliquary"
+      "MINIO_PORT=9000"
       "AUTH_USERNAME=admin"
       "AUTH_PASSWORD=admin"
       "JWT_SECRET=change-me-in-production"
       "THUMBNAIL_WORKERS=4"
-      "ARCHIVE_AFTER_DAYS=90"
-      "ARCHIVE_CHECK_HOURS=24"
       "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
     ];
     Volumes = {

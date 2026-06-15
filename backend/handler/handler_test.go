@@ -62,3 +62,22 @@ func TestIsVideoContentType(t *testing.T) {
 		}
 	}
 }
+
+func TestUserOwnsKeyOnlyAllowsActiveNamespaces(t *testing.T) {
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{"files/alice/2026/06/report.pdf", true},
+		{"thumbs/alice/2026/06/report.pdf", true},
+		{"archive/alice/2026/06/report.pdf", false},
+		{"archive-thumbs/alice/2026/06/report.pdf", false},
+		{"files/bob/2026/06/report.pdf", false},
+	}
+
+	for _, tt := range tests {
+		if got := userOwnsKey("alice", tt.key); got != tt.want {
+			t.Errorf("userOwnsKey(%q) = %v, want %v", tt.key, got, tt.want)
+		}
+	}
+}

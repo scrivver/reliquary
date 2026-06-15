@@ -95,6 +95,18 @@ func (c *Client) StatObject(ctx context.Context, key string) (minio.ObjectInfo, 
 	return c.mc.StatObject(ctx, c.bucket, key, minio.StatObjectOptions{})
 }
 
+func IsObjectNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch minio.ToErrorResponse(err).Code {
+	case "NoSuchKey", "NoSuchObject", "NotFound":
+		return true
+	default:
+		return false
+	}
+}
+
 // CopyObject copies an object to a new key within the same bucket (server-side).
 func (c *Client) CopyObject(ctx context.Context, srcKey, dstKey string) error {
 	src := minio.CopySrcOptions{Bucket: c.bucket, Object: srcKey}

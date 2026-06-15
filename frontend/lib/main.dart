@@ -7,6 +7,7 @@ import 'services/auth_service.dart';
 import 'theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+const appTitle = 'Reliquary';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Reliquary',
+      title: appTitle,
       navigatorKey: navigatorKey,
       theme: ReliquaryTheme.light,
       debugShowCheckedModeBanner: false,
@@ -72,9 +73,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_checking) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_loggedIn) {

@@ -15,22 +15,24 @@ class ApiService {
 
   ApiService(this._authService, {this.onUnauthorized}) {
     _dio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl));
-    _dio.interceptors.add(InterceptorsWrapper(
-      onRequest: (options, handler) async {
-        final token = await _authService.getToken();
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
-        }
-        handler.next(options);
-      },
-      onError: (error, handler) async {
-        if (error.response?.statusCode == 401) {
-          await _authService.logout();
-          onUnauthorized?.call();
-        }
-        handler.next(error);
-      },
-    ));
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final token = await _authService.getToken();
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          handler.next(options);
+        },
+        onError: (error, handler) async {
+          if (error.response?.statusCode == 401) {
+            await _authService.logout();
+            onUnauthorized?.call();
+          }
+          handler.next(error);
+        },
+      ),
+    );
   }
 
   /// Upload a file through the Go backend (multipart).
@@ -43,9 +45,11 @@ class ApiService {
     void Function(int, int)? onProgress,
   }) async {
     final map = <String, dynamic>{
-      'file': MultipartFile.fromBytes(bytes,
-          filename: filename,
-          contentType: DioMediaType.parse(contentType)),
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: filename,
+        contentType: DioMediaType.parse(contentType),
+      ),
     };
     if (relativePath != null) {
       map['path'] = relativePath;
@@ -66,12 +70,13 @@ class ApiService {
 
   /// List files with pagination.
   Future<FileListResult> listFiles({int offset = 0, int limit = 50}) async {
-    final response = await _dio.get('/api/files', queryParameters: {
-      'offset': offset,
-      'limit': limit,
-    });
+    final response = await _dio.get(
+      '/api/files',
+      queryParameters: {'offset': offset, 'limit': limit},
+    );
     final data = response.data;
-    final files = (data['files'] as List?)
+    final files =
+        (data['files'] as List?)
             ?.map((f) => FileItem.fromJson(f as Map<String, dynamic>))
             .toList() ??
         [];
@@ -91,25 +96,32 @@ class ApiService {
       return cached.url;
     }
 
-    final response =
-        await _dio.get('/api/files/presign', queryParameters: {'key': key});
+    final response = await _dio.get(
+      '/api/files/presign',
+      queryParameters: {'key': key},
+    );
     final relativePath = response.data['url'] as String;
     final url = AppConfig.apiBaseUrl + relativePath;
 
-    _urlCache[key] = _CachedUrl(url: url, expiresAt: DateTime.now().add(_cacheTtl));
+    _urlCache[key] = _CachedUrl(
+      url: url,
+      expiresAt: DateTime.now().add(_cacheTtl),
+    );
     return url;
   }
 
   /// Get a presigned download URL with content-disposition: attachment.
   /// Forces the browser to download instead of displaying inline.
   Future<String> presignDownloadForSave(String key) async {
-    final response = await _dio.get('/api/files/presign',
-        queryParameters: {'key': key, 'download': 'true'});
+    final response = await _dio.get(
+      '/api/files/presign',
+      queryParameters: {'key': key, 'download': 'true'},
+    );
     final relativePath = response.data['url'] as String;
     return AppConfig.apiBaseUrl + relativePath;
   }
 
-  /// Delete a file from the archive.
+  /// Delete an active file.
   Future<void> deleteFile(String key) async {
     await _dio.delete('/api/files', queryParameters: {'key': key});
   }
@@ -122,42 +134,6 @@ class ApiService {
       options: Options(responseType: ResponseType.bytes),
     );
     return response.data as List<int>;
-  }
-
-  // --- Archive API ---
-
-  /// List archived files with pagination.
-  Future<FileListResult> listArchive({int offset = 0, int limit = 50}) async {
-    final response = await _dio.get('/api/archive', queryParameters: {
-      'offset': offset,
-      'limit': limit,
-    });
-    final data = response.data;
-    final files = (data['files'] as List?)
-            ?.map((f) => FileItem.fromJson(f as Map<String, dynamic>))
-            .toList() ??
-        [];
-    return FileListResult(
-      files: files,
-      totalCount: data['total_count'] as int,
-      offset: data['offset'] as int,
-      limit: data['limit'] as int,
-    );
-  }
-
-  /// Restore a file from archive to active files.
-  Future<void> restoreArchive(String key) async {
-    await _dio.post('/api/archive/restore', queryParameters: {'key': key});
-  }
-
-  /// Delete an archived file.
-  Future<void> deleteArchive(String key) async {
-    await _dio.delete('/api/archive', queryParameters: {'key': key});
-  }
-
-  /// Trigger archival scan manually.
-  Future<void> runArchival() async {
-    await _dio.post('/api/archive/run');
   }
 
   // --- Stats API ---
@@ -178,11 +154,10 @@ class ApiService {
 
   /// Create a new user (admin only).
   Future<void> createUser(String username, String password, String role) async {
-    await _dio.post('/api/admin/users', data: {
-      'username': username,
-      'password': password,
-      'role': role,
-    });
+    await _dio.post(
+      '/api/admin/users',
+      data: {'username': username, 'password': password, 'role': role},
+    );
   }
 
   /// Delete a user (admin only).
@@ -192,9 +167,10 @@ class ApiService {
 
   /// Change a user's password.
   Future<void> changePassword(String username, String newPassword) async {
-    await _dio.put('/api/admin/users/$username/password', data: {
-      'password': newPassword,
-    });
+    await _dio.put(
+      '/api/admin/users/$username/password',
+      data: {'password': newPassword},
+    );
   }
 }
 

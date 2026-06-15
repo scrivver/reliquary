@@ -62,11 +62,7 @@ func main() {
 	thumbs := worker.NewThumbnailWorker(store, cfg.ThumbnailWorkers)
 	thumbs.Start(context.Background(), cfg.ThumbnailWorkers)
 
-	archival := worker.NewArchivalWorker(cfg, store, checksums, users)
-	h := handler.New(cfg, store, thumbs, checksums, archival)
-
-	// Start archival worker in background.
-	go archival.Start(context.Background())
+	h := handler.New(cfg, store, thumbs, checksums)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -158,7 +154,7 @@ func main() {
 	}
 }
 
-// registerFileRoutes registers the common file/archive/stats routes.
+// registerFileRoutes registers the common file and stats routes.
 func registerFileRoutes(r chi.Router, h *handler.Handler) {
 	r.Post("/api/upload", h.Upload)
 	r.Get("/api/files", h.ListFiles)
@@ -167,9 +163,4 @@ func registerFileRoutes(r chi.Router, h *handler.Handler) {
 	r.Delete("/api/files", h.DeleteFile)
 
 	r.Get("/api/stats", h.Stats)
-
-	r.Get("/api/archive", h.ListArchive)
-	r.Post("/api/archive/restore", h.RestoreArchive)
-	r.Post("/api/archive/run", h.RunArchival)
-	r.Delete("/api/archive", h.DeleteArchive)
 }

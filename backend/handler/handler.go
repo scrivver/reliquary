@@ -3,7 +3,6 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -26,13 +25,12 @@ import (
 type Handler struct {
 	store        *storage.Client
 	thumbs       *worker.ThumbnailWorker
-	archival     *worker.ArchivalWorker
 	checksums    *storage.ChecksumIndex
 	proxyBaseURL string
 }
 
-func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker, checksums *storage.ChecksumIndex, archival *worker.ArchivalWorker) *Handler {
-	return &Handler{store: store, thumbs: thumbs, archival: archival, checksums: checksums, proxyBaseURL: cfg.ProxyBaseURL}
+func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker, checksums *storage.ChecksumIndex) *Handler {
+	return &Handler{store: store, thumbs: thumbs, checksums: checksums, proxyBaseURL: cfg.ProxyBaseURL}
 }
 
 // --- Request / Response types ---
@@ -285,92 +283,6 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"status": "deleted"})
 }
 
-// ListArchive returns archived files with pagination.
-// GET /api/archive?offset=0&limit=50
-func (h *Handler) ListArchive(w http.ResponseWriter, r *http.Request) {
-	username := auth.UsernameFromContext(r.Context())
-	h.listObjectsWithPagination(w, r, "archive/"+username+"/", "archive/", "archive-thumbs/")
-}
-
-// RestoreArchive moves a file from archive back to active files.
-// POST /api/archive/restore?key=...
-func (h *Handler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
-	username := auth.UsernameFromContext(r.Context())
-	key := r.URL.Query().Get("key")
-	if key == "" {
-		httpError(w, "key query parameter is required", http.StatusBadRequest)
-		return
-	}
-	if !userOwnsKey(username, key) {
-		httpError(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
-	restoredKey := rekeyPrefix(key, "archive/", "files/")
-	if restoredKey == "" {
-		httpError(w, "invalid archive key", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.store.MoveObject(r.Context(), key, restoredKey); err != nil {
-		slog.Error("restore failed", "key", key, "error", err)
-		httpError(w, "failed to restore file", http.StatusInternalServerError)
-		return
-	}
-
-	thumbKey := rekeyPrefix(key, "archive/", "archive-thumbs/")
-	restoredThumbKey := rekeyPrefix(key, "archive/", "thumbs/")
-	if err := h.store.MoveObject(r.Context(), thumbKey, restoredThumbKey); err != nil {
-		slog.Debug("no archived thumbnail to restore", "key", thumbKey)
-	}
-
-	if stat, err := h.store.StatObject(r.Context(), restoredKey); err == nil {
-		if cs := stat.UserMetadata["Checksum"]; cs != "" {
-			h.checksums.Add(r.Context(), username, cs, restoredKey)
-		}
-	}
-
-	slog.Info("file restored from archive", "from", key, "to", restoredKey)
-	jsonResponse(w, map[string]string{"status": "restored", "key": restoredKey})
-}
-
-// DeleteArchive removes an archived file.
-// DELETE /api/archive?key=...
-func (h *Handler) DeleteArchive(w http.ResponseWriter, r *http.Request) {
-	username := auth.UsernameFromContext(r.Context())
-	key := r.URL.Query().Get("key")
-	if key == "" {
-		httpError(w, "key query parameter is required", http.StatusBadRequest)
-		return
-	}
-	if !userOwnsKey(username, key) {
-		httpError(w, "forbidden", http.StatusForbidden)
-		return
-	}
-
-	if err := h.store.DeleteObject(r.Context(), key); err != nil {
-		slog.Error("delete archived object failed", "key", key, "error", err)
-		httpError(w, "failed to delete archived file", http.StatusInternalServerError)
-		return
-	}
-
-	h.checksums.RemoveByKey(r.Context(), username, key)
-
-	thumbKey := rekeyPrefix(key, "archive/", "archive-thumbs/")
-	if thumbKey != "" {
-		h.store.DeleteObject(r.Context(), thumbKey)
-	}
-
-	jsonResponse(w, map[string]string{"status": "deleted"})
-}
-
-// RunArchival triggers the archival process manually.
-// POST /api/archive/run
-func (h *Handler) RunArchival(w http.ResponseWriter, r *http.Request) {
-	go h.archival.RunOnce(context.Background())
-	jsonResponse(w, map[string]string{"status": "archival started"})
-}
-
 // --- Admin handlers ---
 
 type CreateUserRequest struct {
@@ -608,17 +520,15 @@ func rekeyPrefix(key, from, to string) string {
 	return to + strings.TrimPrefix(key, from)
 }
 
-// userOwnsKey checks that key lives in one of the owner-prefixed namespaces
-// for username (files/, archive/, thumbs/, archive-thumbs/).
+// userOwnsKey checks that key lives in one of the active owner-prefixed
+// namespaces for username.
 func userOwnsKey(username, key string) bool {
 	if username == "" {
 		return false
 	}
 	prefixes := [...]string{
 		"files/" + username + "/",
-		"archive/" + username + "/",
 		"thumbs/" + username + "/",
-		"archive-thumbs/" + username + "/",
 	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(key, p) {

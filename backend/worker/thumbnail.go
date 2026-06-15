@@ -70,7 +70,7 @@ func (w *ThumbnailWorker) Submit(fileKey, contentType string) {
 	}
 }
 
-// GenerateThumbnail creates a thumbnail synchronously (used by archival worker etc).
+// GenerateThumbnail creates a thumbnail synchronously.
 func (w *ThumbnailWorker) GenerateThumbnail(ctx context.Context, fileKey, contentType string) error {
 	return w.generateThumbnail(ctx, fileKey, contentType)
 }

@@ -6,7 +6,8 @@ pkgs.buildGoModule {
 
   src = ../backend;
 
-  vendorHash = "sha256-6tKINcMT9d5G5jyMkZPoCAwnY4+sdNRFK1wsR030FQY=";
+  vendorHash = "sha256-vQa4OBiKzHrUsGYcRrdehCspREJcxQKoU2P/KbYwtz8=";
+  subPackages = [ "." "cmd/restore-archive" ];
 
   # ffmpeg and poppler-utils needed at runtime for thumbnail generation
   nativeBuildInputs = [ pkgs.makeWrapper ];

@@ -18,7 +18,6 @@ Reliquary preserves what the world discards.
 - **Multi-file upload** with progress tracking, duplicate detection (SHA-256), and download support
 - **Thumbnail generation** for images (resize) and videos (ffmpeg first-frame extraction)
 - **Multi-user support** with admin/user roles and per-user isolated storage
-- **Lifecycle archival** — automatically archive files older than a configurable threshold
 - **Storage analytics** — file counts, storage usage by type and month
 - **Configurable server URL** — connect to different Reliquary instances (portable drive support)
 - **Responsive UI** — bottom navigation on mobile, sidebar on desktop, industrial design theme
@@ -89,7 +88,7 @@ The Caddy reverse proxy runs on `http://localhost:2080` and routes:
 
 ### Backend
 
-The backend is a Go API server located in `backend/`. It provides JWT authentication, multi-user management, multipart file upload to MinIO, deduplication, thumbnail generation, lifecycle archival, and storage analytics.
+The backend is a Go API server located in `backend/`. It provides JWT authentication, multi-user management, multipart file upload to MinIO, deduplication, thumbnail generation, and storage analytics.
 
 ```bash
 start-backend            # loads env, runs air (hot reload) on unix socket
@@ -115,10 +114,6 @@ The server listens on a unix socket by default for use with the Caddy proxy. For
 | GET | `/api/files?offset=0&limit=50` | Yes | List files (paginated) |
 | GET | `/api/files/presign?key=...&download=true` | Yes | Presigned download URL (`download=true` forces save) |
 | DELETE | `/api/files?key=...` | Yes | Delete file and thumbnail |
-| GET | `/api/archive?offset=0&limit=50` | Yes | List archived files |
-| POST | `/api/archive/restore?key=...` | Yes | Restore from archive |
-| POST | `/api/archive/run` | Yes | Trigger archival manually |
-| DELETE | `/api/archive?key=...` | Yes | Delete archived file |
 | GET | `/api/stats` | Yes | Storage analytics |
 | GET | `/api/admin/stats` | Admin | Aggregate analytics |
 | POST | `/api/admin/users` | Admin | Create user |
@@ -139,8 +134,6 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 | `AUTH_USERNAME` | `admin` | Initial admin / default user |
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
-| `ARCHIVE_AFTER_DAYS` | `90` | Days before auto-archival |
-| `ARCHIVE_CHECK_HOURS` | `24` | Hours between archival scans |
 
 #### Auth Modes
 
@@ -187,7 +180,6 @@ Features:
 - File download, details, and delete via long-press menu
 - Content-type aware file icons (image, video, audio, PDF, archive)
 - File metadata display (checksum, upload date, original name)
-- Archive browser with restore and permanent delete
 - Storage analytics dashboard
 - Admin user management (create, delete, change password)
 - Configurable server URL (login screen + settings)
@@ -279,8 +271,32 @@ All configuration is via environment variables in `.env`:
 | `AUTH_PASSWORD` | `admin` | Initial admin password |
 | `JWT_SECRET` | — | JWT signing secret (must change for production) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
-| `ARCHIVE_AFTER_DAYS` | `90` | Days before auto-archival |
-| `ARCHIVE_CHECK_HOURS` | `24` | Hours between archival scans |
+
+### Restoring Data From Older Releases
+
+Lifecycle archival is no longer active. Before or immediately after upgrading an
+installation that contains `archive/` objects, preview the one-time restoration:
+
+```bash
+# Development, with infrastructure running and environment loaded
+cd backend
+go run ./cmd/restore-archive
+
+# Packaged container
+docker exec reliquary restore-archive
+```
+
+The command defaults to dry-run and reports destination conflicts. Resolve any
+conflicts, then apply the migration:
+
+```bash
+go run ./cmd/restore-archive -apply
+# or
+docker exec reliquary restore-archive -apply
+```
+
+It moves `archive/` to `files/`, moves `archive-thumbs/` to `thumbs/`, never
+overwrites active objects, and rebuilds per-user checksum indexes.
 
 ### Architecture
 

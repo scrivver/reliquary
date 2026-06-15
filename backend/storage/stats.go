@@ -9,12 +9,10 @@ import (
 )
 
 type UserStats struct {
-	TotalSize    int64          `json:"total_size"`
-	FileCount    int            `json:"file_count"`
-	ArchiveCount int            `json:"archive_count"`
-	ArchiveSize  int64          `json:"archive_size"`
-	ByType       map[string]int `json:"by_type"`
-	ByMonth      map[string]int `json:"by_month"`
+	TotalSize int64          `json:"total_size"`
+	FileCount int            `json:"file_count"`
+	ByType    map[string]int `json:"by_type"`
+	ByMonth   map[string]int `json:"by_month"`
 }
 
 // ComputeUserStats calculates storage analytics for a user.
@@ -50,18 +48,6 @@ func (c *Client) ComputeUserStats(ctx context.Context, username string) (UserSta
 		if month := extractMonth(obj.Key, filesPrefix); month != "" {
 			stats.ByMonth[month]++
 		}
-	}
-
-	// Archived files.
-	archivePrefix := fmt.Sprintf("archive/%s/", username)
-	archived, err := c.ListObjects(ctx, archivePrefix)
-	if err != nil {
-		return stats, err
-	}
-
-	for _, obj := range archived {
-		stats.ArchiveCount++
-		stats.ArchiveSize += obj.Size
 	}
 
 	return stats, nil

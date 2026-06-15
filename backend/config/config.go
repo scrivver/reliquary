@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type Config struct {
@@ -29,16 +28,12 @@ type Config struct {
 	Password  string
 
 	// OIDC (AUTH_MODE=oidc)
-	OIDCIssuerURL    string // e.g. "http://localhost:9000/application/o/mind-palace/"
-	OIDCClientID     string // expected aud claim
+	OIDCIssuerURL     string // e.g. "http://localhost:9000/application/o/mind-palace/"
+	OIDCClientID      string // expected aud claim
 	OIDCUsernameClaim string // JWT claim for username (default: preferred_username)
 
 	// Workers
 	ThumbnailWorkers int
-
-	// Lifecycle
-	ArchiveAfterDays     int
-	ArchiveCheckInterval time.Duration
 }
 
 func Load() (*Config, error) {
@@ -53,8 +48,8 @@ func Load() (*Config, error) {
 		ListenAddr:     listenAddr,
 		ProxyBaseURL:   envOr("PROXY_BASE_URL", "http://localhost:2080"),
 		MinIOEndpoint:  envOr("MINIO_ENDPOINT", "127.0.0.1:"+minioPort),
-		MinIOAccessKey: envOr("MINIO_ACCESS_KEY", "minioadmin"),
-		MinIOSecretKey: envOr("MINIO_SECRET_KEY", "minioadmin"),
+		MinIOAccessKey: envOr("MINIO_ACCESS_KEY", envOr("MINIO_ROOT_USER", "minioadmin")),
+		MinIOSecretKey: envOr("MINIO_SECRET_KEY", envOr("MINIO_ROOT_PASSWORD", "minioadmin")),
 		MinIOBucket:    envOr("MINIO_BUCKET", "reliquary"),
 		MinIOUseSSL:    strings.ToLower(envOr("MINIO_USE_SSL", "false")) == "true",
 		AuthMode:       strings.ToLower(envOr("AUTH_MODE", "full")),
@@ -66,10 +61,7 @@ func Load() (*Config, error) {
 		OIDCClientID:      envOr("OIDC_CLIENT_ID", ""),
 		OIDCUsernameClaim: envOr("OIDC_USERNAME_CLAIM", "preferred_username"),
 
-		ThumbnailWorkers:     envOrInt("THUMBNAIL_WORKERS", 4),
-
-		ArchiveAfterDays:     envOrInt("ARCHIVE_AFTER_DAYS", 90),
-		ArchiveCheckInterval: time.Duration(envOrInt("ARCHIVE_CHECK_HOURS", 24)) * time.Hour,
+		ThumbnailWorkers: envOrInt("THUMBNAIL_WORKERS", 4),
 	}
 
 	return cfg, nil

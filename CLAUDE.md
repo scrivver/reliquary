@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Reliquary is a self-hosted cold storage system for forgotten artifacts, built with Nix flakes for reproducibility. The project consists of a Go backend, a Flutter frontend, and MinIO-based infrastructure managed via process-compose. It supports multi-user accounts, file deduplication, automatic lifecycle archival, and video thumbnail generation.
+Reliquary is a self-hosted cold storage system for forgotten artifacts, built with Nix flakes for reproducibility. The project consists of a Go backend, a Flutter frontend, and MinIO-based infrastructure managed via process-compose. It supports multi-user accounts, file deduplication, and video thumbnail generation.
 
 ## Development Environment
 
@@ -37,17 +37,18 @@ shutdown-infra           # Stop all services
 
 - **`flake.nix`** — Dev shell definitions. Imports shell modules from `shells/` and generates the process-compose config at nix eval time using `pkgs.formats.yaml`.
 - **`shells/`** — Nix shell definitions. `infra.nix` is the base shell; `backend.nix` and `frontend.nix` extend it via `inputsFrom`.
-- **`backend/`** — Go API server (chi router, JWT auth, multipart upload, thumbnail generation, lifecycle archival).
-  - `config/` — Environment-based configuration (MinIO, auth, JWT, lifecycle, worker pool).
+- **`backend/`** — Go API server (chi router, JWT auth, multipart upload, thumbnail generation).
+  - `config/` — Environment-based configuration (MinIO, auth, JWT, worker pool).
   - `auth/` — JWT login handler, auth middleware, admin middleware, and user store (JSON in MinIO with bcrypt).
-  - `handler/` — HTTP handlers for upload, file listing, presigned download, deletion, archive management, user admin, and storage analytics.
-  - `storage/` — MinIO client wrapper (put, get, list, delete, presign, stat, copy, move). Per-user checksum index. Storage stats computation. Legacy migration.
-  - `worker/` — Thumbnail generation (bounded worker pool, image resize + ffmpeg video frame extraction). Lifecycle archival worker (configurable retention).
+  - `handler/` — HTTP handlers for upload, file listing, presigned download, deletion, user admin, and storage analytics.
+  - `storage/` — MinIO client wrapper (put, get, list, delete, presign, stat, copy, move). Per-user checksum index, storage stats, and one-time migrations.
+  - `worker/` — Thumbnail generation (bounded worker pool, image resize + ffmpeg video frame extraction).
+  - `cmd/restore-archive/` — conflict-safe one-time migration for data archived by older releases.
 - **`frontend/`** — Flutter application (web, Android, iOS, Linux desktop targets).
   - `lib/config.dart` — API base URL configuration (persisted, configurable at runtime).
   - `lib/models/` — Data models (FileItem with content type, checksum, metadata).
-  - `lib/services/` — Auth service (JWT + username/role + shared_preferences), API service (Dio + multipart upload + presigned URL caching + admin/archive/stats API), and platform file picker (custom HTML implementation for web, file_picker for native).
-  - `lib/screens/` — Login (with server config), gallery (thumbnail grid + full-res viewer + download + file menu), upload (multi-file with progress + duplicate detection), archive (browse/restore/delete), stats (analytics dashboard), admin (user management), settings (server URL + password change). Responsive navigation: bottom bar on mobile, sidebar on desktop.
+  - `lib/services/` — Auth service (JWT + username/role + shared_preferences), API service (Dio + multipart upload + presigned URL caching + admin/stats API), and platform file picker (custom HTML implementation for web, file_picker for native).
+  - `lib/screens/` — Login (with server config), gallery (thumbnail grid + full-res viewer + download + file menu), upload (multi-file with progress + duplicate detection), stats (analytics dashboard), admin (user management), settings (server URL + password change). Responsive navigation: bottom bar on mobile, sidebar on desktop.
 - **`infra/minio.nix`** — Defines MinIO process-compose processes as a Nix attrset. Uses ephemeral ports (allocated via Python at runtime) and writes them to `$DATA_DIR/minio/port` and `$DATA_DIR/minio/console_port`. Includes a `minio-create-bucket` process that depends on MinIO being healthy.
 - **`infra/caddy.nix`** — Caddy reverse proxy process. Routes `/api/*` to the Go backend (unix socket) and `/storage/*` to MinIO. Handles CORS and strips duplicate MinIO CORS headers. Listens on port 2080 by default.
 - **`bin/`** — Shell scripts injected into PATH by the dev shell. Includes `dev` (tmux launcher), `start-backend`, `start-frontend`, `start-infra`, `load-infra-env`, `shutdown-infra`.
@@ -67,15 +68,6 @@ All endpoints except `/api/login` and `/api/health` require a `Bearer` JWT token
 | GET | `/api/files?offset=0&limit=50` | List user's files (paginated, includes metadata) |
 | GET | `/api/files/presign?key=...&download=true` | Presigned download URL (relative path, `download=true` forces content-disposition attachment) |
 | DELETE | `/api/files?key=...` | Delete file, thumbnail, and checksum index entry |
-
-### Archive
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/archive?offset=0&limit=50` | List archived files (paginated) |
-| POST | `/api/archive/restore?key=...` | Restore file from archive to active |
-| POST | `/api/archive/run` | Trigger archival scan manually |
-| DELETE | `/api/archive?key=...` | Permanently delete archived file |
 
 ### Analytics & Admin
 
@@ -118,8 +110,6 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret (full mode only) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail generation workers |
-| `ARCHIVE_AFTER_DAYS` | `90` | Days before files are auto-archived |
-| `ARCHIVE_CHECK_HOURS` | `24` | Hours between archival scans |
 
 ## Key Design Decisions
 
@@ -135,6 +125,8 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Layered dev shells**: Each shell (`infra`, `backend`, `frontend`) composes via `inputsFrom`, so every shell includes infra tooling. The default `full` shell combines backend and frontend.
 - **Relative presigned URLs**: Backend returns relative paths (`/storage/...`) for presigned URLs. Frontend prepends its configured `apiBaseUrl`, enabling cross-device access (e.g., mobile on LAN).
 - **Custom web file picker**: Flutter's `file_picker` package is unreliable on web. A custom implementation using `HTMLInputElement` directly is used for web; native platforms use `file_picker`.
+- **No lifecycle archival**: Active files remain under `files/<user>/...` until explicitly deleted. `backend/worker/archival.go` is a dormant marker only.
+- **Legacy archive restoration**: Run `restore-archive` without flags for a dry-run, then with `-apply` after resolving conflicts.
 
 ## Deployment
 
@@ -164,7 +156,7 @@ docker compose up -d    # Available at http://localhost:2080
 
 ### Nix Build Targets
 
-- `nix build .#backend` — Go binary with ffmpeg in PATH
+- `nix build .#backend` — Go backend and `restore-archive` binaries with ffmpeg in PATH
 - `nix build .#container` — OCI image (reliquary.tar.gz)
 
 ### Container Architecture
