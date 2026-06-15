@@ -34,6 +34,12 @@ type Config struct {
 
 	// Workers
 	ThumbnailWorkers int
+
+	// File events
+	EventsEnabled   bool
+	RabbitMQURL     string
+	EventQueue      string
+	EventDeviceName string
 }
 
 func Load() (*Config, error) {
@@ -62,6 +68,11 @@ func Load() (*Config, error) {
 		OIDCUsernameClaim: envOr("OIDC_USERNAME_CLAIM", "preferred_username"),
 
 		ThumbnailWorkers: envOrInt("THUMBNAIL_WORKERS", 4),
+
+		EventsEnabled:   envOrBool("EVENTS_ENABLED", true),
+		RabbitMQURL:     envOr("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672"),
+		EventQueue:      envOr("EVENT_QUEUE", "engram.ingest"),
+		EventDeviceName: envOr("EVENT_DEVICE_NAME", "reliquary"),
 	}
 
 	return cfg, nil
@@ -78,6 +89,15 @@ func envOrInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+func envOrBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			return parsed
 		}
 	}
 	return fallback

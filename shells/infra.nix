@@ -4,6 +4,7 @@ pkgs.mkShell {
   name = "reliquary-infra-shell";
   buildInputs = [
     pkgs.minio
+    pkgs.rabbitmq-server
     pkgs.caddy
     pkgs.process-compose
     pkgs.python3
@@ -18,6 +19,7 @@ pkgs.mkShell {
     export DATA_DIR="$PWD/.data"
     mkdir -p "$DATA_DIR"
     mkdir -p "$DATA_DIR/minio"
+    mkdir -p "$DATA_DIR/rabbitmq"
 
     export MINIO_PATH="$DATA_DIR/minio"
 
@@ -30,6 +32,7 @@ pkgs.mkShell {
     # Export port file paths so other services can read the dynamic ports
     export MINIO_PORT_FILE="$DATA_DIR/minio/port"
     export MINIO_CONSOLE_PORT_FILE="$DATA_DIR/minio/console_port"
+    export RABBITMQ_AMQP_PORT_FILE="$DATA_DIR/rabbitmq/amqp_port"
     export PROXY_PORT_FILE="$DATA_DIR/caddy/port"
   '';
 }

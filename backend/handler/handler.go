@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -18,19 +20,54 @@ import (
 
 	"reliquary-be/auth"
 	"reliquary-be/config"
+	"reliquary-be/event"
 	"reliquary-be/storage"
 	"reliquary-be/worker"
+
+	"github.com/minio/minio-go/v7"
 )
 
+type fileStore interface {
+	StatObject(ctx context.Context, key string) (minio.ObjectInfo, error)
+	PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string, userMeta map[string]string) error
+	PresignGet(ctx context.Context, key string, forceDownload bool) (*url.URL, error)
+	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
+	DeleteObject(ctx context.Context, key string) error
+	ComputeUserStats(ctx context.Context, username string) (storage.UserStats, error)
+	ListObjects(ctx context.Context, prefix string) ([]minio.ObjectInfo, error)
+}
+
+type checksumIndex interface {
+	LoadUser(ctx context.Context, username string) error
+	Lookup(username, checksum string) string
+	Add(ctx context.Context, username, checksum, key string) error
+	RemoveByKey(ctx context.Context, username, key string) error
+}
+
 type Handler struct {
-	store        *storage.Client
+	store        fileStore
 	thumbs       *worker.ThumbnailWorker
-	checksums    *storage.ChecksumIndex
+	checksums    checksumIndex
+	events       event.Emitter
+	deviceName   string
 	proxyBaseURL string
 }
 
-func New(cfg *config.Config, store *storage.Client, thumbs *worker.ThumbnailWorker, checksums *storage.ChecksumIndex) *Handler {
-	return &Handler{store: store, thumbs: thumbs, checksums: checksums, proxyBaseURL: cfg.ProxyBaseURL}
+func New(
+	cfg *config.Config,
+	store *storage.Client,
+	thumbs *worker.ThumbnailWorker,
+	checksums *storage.ChecksumIndex,
+	events event.Emitter,
+) *Handler {
+	return &Handler{
+		store:        store,
+		thumbs:       thumbs,
+		checksums:    checksums,
+		events:       events,
+		deviceName:   cfg.EventDeviceName,
+		proxyBaseURL: cfg.ProxyBaseURL,
+	}
 }
 
 // --- Request / Response types ---
@@ -129,6 +166,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// Check for duplicate by checksum.
 	if existingKey := h.checksums.Lookup(username, checksum); existingKey != "" {
 		slog.Info("duplicate detected", "checksum", checksum, "existing_key", existingKey)
+		if err := h.emitCreate(r.Context(), existingKey, checksum); err != nil {
+			slog.Error("failed to publish duplicate file event", "key", existingKey, "error", err)
+			httpError(w, "file exists but its event could not be published; retry upload", http.StatusServiceUnavailable)
+			return
+		}
 		jsonResponse(w, UploadResponse{Key: existingKey, Size: int64(len(data)), Duplicate: true})
 		return
 	}
@@ -154,6 +196,12 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if hasThumbnailSupport(contentType) {
 		h.thumbs.Submit(fileKey, contentType)
+	}
+
+	if err := h.emitCreate(r.Context(), fileKey, checksum); err != nil {
+		slog.Error("failed to publish file event", "key", fileKey, "error", err)
+		httpError(w, "file stored but its event could not be published; retry upload", http.StatusServiceUnavailable)
+		return
 	}
 
 	jsonResponse(w, UploadResponse{Key: fileKey, Size: header.Size})
@@ -280,7 +328,40 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		h.store.DeleteObject(r.Context(), thumbKey)
 	}
 
+	if err := h.emitDelete(r.Context(), key); err != nil {
+		slog.Error("failed to publish delete event", "key", key, "error", err)
+		httpError(w, "file deleted but its event could not be published; retry delete", http.StatusServiceUnavailable)
+		return
+	}
+
 	jsonResponse(w, map[string]string{"status": "deleted"})
+}
+
+func (h *Handler) emitDelete(ctx context.Context, key string) error {
+	return h.events.Emit(ctx, event.FileEvent{
+		Event:       event.Delete,
+		FilePath:    key,
+		Filename:    path.Base(key),
+		DeviceName:  h.deviceName,
+		StorageType: event.StorageS3,
+	})
+}
+
+func (h *Handler) emitCreate(ctx context.Context, key, checksum string) error {
+	stat, err := h.store.StatObject(ctx, key)
+	if err != nil {
+		return fmt.Errorf("stat uploaded object: %w", err)
+	}
+	return h.events.Emit(ctx, event.FileEvent{
+		Event:       event.Create,
+		FilePath:    key,
+		Filename:    path.Base(key),
+		Size:        stat.Size,
+		Hash:        "sha256:" + checksum,
+		Mtime:       stat.LastModified.UTC().Format(time.RFC3339),
+		DeviceName:  h.deviceName,
+		StorageType: event.StorageS3,
+	})
 }
 
 // --- Admin handlers ---

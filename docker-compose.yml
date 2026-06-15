@@ -1,6 +1,21 @@
 services:
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./docker/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./docker/rabbitmq-definitions.json:/etc/rabbitmq/definitions.json:ro
+
   reliquary:
     image: reliquary:latest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "${RELIQUARY_PORT:-2080}:2080"
     environment:
@@ -8,6 +23,10 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-reliquary}
       MINIO_PORT: 9000
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      EVENTS_ENABLED: ${EVENTS_ENABLED:-true}
+      EVENT_QUEUE: ${EVENT_QUEUE:-engram.ingest}
+      EVENT_DEVICE_NAME: ${EVENT_DEVICE_NAME:-reliquary}
       AUTH_USERNAME: ${AUTH_USERNAME:-admin}
       AUTH_PASSWORD: ${AUTH_PASSWORD:-admin}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
@@ -17,3 +36,4 @@ services:
 
 volumes:
   minio_data:
+  rabbitmq_data:

@@ -1,6 +1,131 @@
 package handler
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/minio/minio-go/v7"
+
+	"reliquary-be/auth"
+	"reliquary-be/event"
+	"reliquary-be/storage"
+)
+
+type fakeFileStore struct {
+	stat minio.ObjectInfo
+}
+
+func (s *fakeFileStore) StatObject(context.Context, string) (minio.ObjectInfo, error) {
+	return s.stat, nil
+}
+func (*fakeFileStore) PutObject(context.Context, string, io.Reader, int64, string, map[string]string) error {
+	return nil
+}
+func (*fakeFileStore) PresignGet(context.Context, string, bool) (*url.URL, error) {
+	return nil, nil
+}
+func (*fakeFileStore) GetObject(context.Context, string) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (*fakeFileStore) DeleteObject(context.Context, string) error {
+	return nil
+}
+func (*fakeFileStore) ComputeUserStats(context.Context, string) (storage.UserStats, error) {
+	return storage.UserStats{}, nil
+}
+func (*fakeFileStore) ListObjects(context.Context, string) ([]minio.ObjectInfo, error) {
+	return nil, nil
+}
+
+type fakeEmitter struct {
+	events []event.FileEvent
+	err    error
+	order  *[]string
+}
+
+func (e *fakeEmitter) Emit(_ context.Context, evt event.FileEvent) error {
+	if e.order != nil {
+		*e.order = append(*e.order, "emit:"+evt.Event)
+	}
+	e.events = append(e.events, evt)
+	return e.err
+}
+func (*fakeEmitter) Close() error { return nil }
+
+type fakeChecksumIndex struct {
+	existing map[string]string
+	order    *[]string
+}
+
+func (*fakeChecksumIndex) LoadUser(context.Context, string) error { return nil }
+func (i *fakeChecksumIndex) Lookup(_ string, checksum string) string {
+	return i.existing[checksum]
+}
+func (i *fakeChecksumIndex) Add(context.Context, string, string, string) error {
+	if i.order != nil {
+		*i.order = append(*i.order, "checksum:add")
+	}
+	return nil
+}
+func (i *fakeChecksumIndex) RemoveByKey(context.Context, string, string) error {
+	if i.order != nil {
+		*i.order = append(*i.order, "checksum:remove")
+	}
+	return nil
+}
+
+type recordingFileStore struct {
+	objects map[string]minio.ObjectInfo
+	order   *[]string
+}
+
+func (s *recordingFileStore) StatObject(_ context.Context, key string) (minio.ObjectInfo, error) {
+	if obj, ok := s.objects[key]; ok {
+		return obj, nil
+	}
+	return minio.ObjectInfo{}, minio.ErrorResponse{Code: "NoSuchKey"}
+}
+func (s *recordingFileStore) PutObject(_ context.Context, key string, _ io.Reader, size int64, _ string, _ map[string]string) error {
+	if s.order != nil {
+		*s.order = append(*s.order, "storage:put")
+	}
+	s.objects[key] = minio.ObjectInfo{
+		Key:          key,
+		Size:         size,
+		LastModified: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC),
+	}
+	return nil
+}
+func (*recordingFileStore) PresignGet(context.Context, string, bool) (*url.URL, error) {
+	return nil, nil
+}
+func (*recordingFileStore) GetObject(context.Context, string) (io.ReadCloser, error) {
+	return nil, nil
+}
+func (s *recordingFileStore) DeleteObject(_ context.Context, key string) error {
+	if s.order != nil {
+		*s.order = append(*s.order, "storage:delete")
+	}
+	delete(s.objects, key)
+	return nil
+}
+func (*recordingFileStore) ComputeUserStats(context.Context, string) (storage.UserStats, error) {
+	return storage.UserStats{}, nil
+}
+func (*recordingFileStore) ListObjects(context.Context, string) ([]minio.ObjectInfo, error) {
+	return nil, nil
+}
 
 func TestSanitizeFilename(t *testing.T) {
 	tests := []struct {
@@ -80,4 +205,195 @@ func TestUserOwnsKeyOnlyAllowsActiveNamespaces(t *testing.T) {
 			t.Errorf("userOwnsKey(%q) = %v, want %v", tt.key, got, tt.want)
 		}
 	}
+}
+
+func TestEmitCreateUsesCanonicalS3Metadata(t *testing.T) {
+	emitter := &fakeEmitter{}
+	modified := time.Date(2026, 6, 15, 12, 0, 0, 0, time.FixedZone("MYT", 8*60*60))
+	h := &Handler{
+		store:      &fakeFileStore{stat: minio.ObjectInfo{Size: 204800, LastModified: modified}},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	err := h.emitCreate(
+		context.Background(),
+		"files/alice/2026/06/report.pdf",
+		"abcdef123456",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(emitter.events) != 1 {
+		t.Fatalf("got %d events, want 1", len(emitter.events))
+	}
+	got := emitter.events[0]
+	if got.Event != event.Create ||
+		got.FilePath != "files/alice/2026/06/report.pdf" ||
+		got.Filename != "report.pdf" ||
+		got.Size != 204800 ||
+		got.Hash != "sha256:abcdef123456" ||
+		got.Mtime != "2026-06-15T04:00:00Z" ||
+		got.StorageType != event.StorageS3 {
+		t.Fatalf("unexpected event: %+v", got)
+	}
+}
+
+func TestEmitCreatePropagatesPublisherFailure(t *testing.T) {
+	publishErr := errors.New("broker unavailable")
+	h := &Handler{
+		store: &fakeFileStore{stat: minio.ObjectInfo{
+			Size:         1,
+			LastModified: time.Now(),
+		}},
+		events:     &fakeEmitter{err: publishErr},
+		deviceName: "reliquary",
+	}
+
+	err := h.emitCreate(context.Background(), "files/alice/a.txt", "abc")
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("got %v, want %v", err, publishErr)
+	}
+}
+
+func TestEmitDeleteUsesCanonicalMinimalEvent(t *testing.T) {
+	emitter := &fakeEmitter{}
+	h := &Handler{events: emitter, deviceName: "reliquary"}
+
+	if err := h.emitDelete(context.Background(), "files/alice/report.pdf"); err != nil {
+		t.Fatal(err)
+	}
+	got := emitter.events[0]
+	if got.Event != event.Delete ||
+		got.FilePath != "files/alice/report.pdf" ||
+		got.Filename != "report.pdf" ||
+		got.Size != 0 ||
+		got.Hash != "" ||
+		got.Mtime != "" {
+		t.Fatalf("unexpected event: %+v", got)
+	}
+}
+
+func TestUploadStoresBeforePublishing(t *testing.T) {
+	var order []string
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo), order: &order}
+	emitter := &fakeEmitter{order: &order}
+	h := &Handler{
+		store:      store,
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string), order: &order},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "report.txt", []byte("hello"))
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	gotOrder := strings.Join(order, ",")
+	if gotOrder != "storage:put,checksum:add,emit:create" {
+		t.Fatalf("unexpected operation order: %s", gotOrder)
+	}
+}
+
+func TestUploadReturnsServiceUnavailableAfterPublishFailure(t *testing.T) {
+	publishErr := errors.New("broker unavailable")
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	h := &Handler{
+		store:      store,
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     &fakeEmitter{err: publishErr},
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "report.txt", []byte("hello"))
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(store.objects) != 1 {
+		t.Fatalf("stored objects=%d, want 1", len(store.objects))
+	}
+}
+
+func TestDuplicateUploadRepublishesCreate(t *testing.T) {
+	data := []byte("hello")
+	sum := sha256.Sum256(data)
+	checksum := hex.EncodeToString(sum[:])
+	existingKey := "files/alice/2026/06/report.txt"
+	emitter := &fakeEmitter{}
+	store := &recordingFileStore{objects: map[string]minio.ObjectInfo{
+		existingKey: {
+			Key:          existingKey,
+			Size:         int64(len(data)),
+			LastModified: time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC),
+		},
+	}}
+	h := &Handler{
+		store:      store,
+		checksums:  &fakeChecksumIndex{existing: map[string]string{checksum: existingKey}},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "report.txt", data)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 || emitter.events[0].FilePath != existingKey {
+		t.Fatalf("unexpected events: %+v", emitter.events)
+	}
+}
+
+func TestDeleteRemovesBeforePublishing(t *testing.T) {
+	var order []string
+	key := "files/alice/report.txt"
+	store := &recordingFileStore{
+		objects: map[string]minio.ObjectInfo{key: {Key: key}},
+		order:   &order,
+	}
+	h := &Handler{
+		store:      store,
+		checksums:  &fakeChecksumIndex{order: &order},
+		events:     &fakeEmitter{order: &order},
+		deviceName: "reliquary",
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/files?key="+url.QueryEscape(key), nil)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.DeleteFile)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	gotOrder := strings.Join(order, ",")
+	if gotOrder != "storage:delete,checksum:remove,storage:delete,emit:delete" {
+		t.Fatalf("unexpected operation order: %s", gotOrder)
+	}
+}
+
+func multipartUploadRequest(t *testing.T, filename string, data []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/upload", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
 }

@@ -6,7 +6,7 @@ pkgs.buildGoModule {
 
   src = ../backend;
 
-  vendorHash = "sha256-vQa4OBiKzHrUsGYcRrdehCspREJcxQKoU2P/KbYwtz8=";
+  vendorHash = "sha256-/OGWqjb9QTneTfGT4fz2LBIAGqMIEVuLQkbnx+OVrSI=";
   subPackages = [ "." "cmd/restore-archive" ];
 
   # ffmpeg and poppler-utils needed at runtime for thumbnail generation

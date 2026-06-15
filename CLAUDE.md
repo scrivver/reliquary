@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Reliquary is a self-hosted cold storage system for forgotten artifacts, built with Nix flakes for reproducibility. The project consists of a Go backend, a Flutter frontend, and MinIO-based infrastructure managed via process-compose. It supports multi-user accounts, file deduplication, and video thumbnail generation.
+Reliquary is a self-hosted cold storage system built with Nix flakes. The Go
+backend stores objects in MinIO and explicitly publishes canonical file events
+to RabbitMQ for Engram ingestion.
 
 ## Development Environment
 
@@ -14,7 +16,7 @@ The project provides multiple dev shells via `flake.nix`:
 nix develop              # Full shell (backend + frontend + infra)
 nix develop .#backend    # Backend shell (Go + infra)
 nix develop .#frontend   # Frontend shell (Flutter + infra)
-nix develop .#infra      # Infra only (MinIO + process-compose)
+nix develop .#infra      # Infra only (MinIO + RabbitMQ + process-compose)
 ```
 
 The shell hook automatically:
@@ -26,8 +28,8 @@ The shell hook automatically:
 
 ```bash
 dev                      # Start all services in tmux (requires tmux)
-start-infra              # Start MinIO + Caddy proxy via process-compose (uses unix socket)
-source load-infra-env    # Export MINIO_PORT, MINIO_CONSOLE_PORT, PROXY_PORT (must source, not execute)
+start-infra              # Start MinIO + RabbitMQ + Caddy via process-compose
+source load-infra-env    # Export MinIO, RabbitMQ, and proxy settings
 start-backend            # Start backend with hot reload in tmux window
 start-frontend           # Start Flutter web server in tmux window
 shutdown-infra           # Stop all services
@@ -39,6 +41,7 @@ shutdown-infra           # Stop all services
 - **`shells/`** — Nix shell definitions. `infra.nix` is the base shell; `backend.nix` and `frontend.nix` extend it via `inputsFrom`.
 - **`backend/`** — Go API server (chi router, JWT auth, multipart upload, thumbnail generation).
   - `config/` — Environment-based configuration (MinIO, auth, JWT, worker pool).
+  - `event/` — Canonical `FileEvent` contract and confirmed RabbitMQ emitter.
   - `auth/` — JWT login handler, auth middleware, admin middleware, and user store (JSON in MinIO with bcrypt).
   - `handler/` — HTTP handlers for upload, file listing, presigned download, deletion, user admin, and storage analytics.
   - `storage/` — MinIO client wrapper (put, get, list, delete, presign, stat, copy, move). Per-user checksum index, storage stats, and one-time migrations.
@@ -50,6 +53,7 @@ shutdown-infra           # Stop all services
   - `lib/services/` — Auth service (JWT + username/role + shared_preferences), API service (Dio + multipart upload + presigned URL caching + admin/stats API), and platform file picker (custom HTML implementation for web, file_picker for native).
   - `lib/screens/` — Login (with server config), gallery (thumbnail grid + full-res viewer + download + file menu), upload (multi-file with progress + duplicate detection), stats (analytics dashboard), admin (user management), settings (server URL + password change). Responsive navigation: bottom bar on mobile, sidebar on desktop.
 - **`infra/minio.nix`** — Defines MinIO process-compose processes as a Nix attrset. Uses ephemeral ports (allocated via Python at runtime) and writes them to `$DATA_DIR/minio/port` and `$DATA_DIR/minio/console_port`. Includes a `minio-create-bucket` process that depends on MinIO being healthy.
+- **`infra/rabbitmq.nix`** — Declares the durable `engram.ingest` queue and direct-exchange binding.
 - **`infra/caddy.nix`** — Caddy reverse proxy process. Routes `/api/*` to the Go backend (unix socket) and `/storage/*` to MinIO. Handles CORS and strips duplicate MinIO CORS headers. Listens on port 2080 by default.
 - **`bin/`** — Shell scripts injected into PATH by the dev shell. Includes `dev` (tmux launcher), `start-backend`, `start-frontend`, `start-infra`, `load-infra-env`, `shutdown-infra`.
 - **`.data/`** — Runtime directory (gitignored). Holds generated configs, MinIO data, Caddy config, port files, and the process-compose unix socket.
@@ -110,6 +114,10 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret (full mode only) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail generation workers |
+| `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Engram event broker |
+| `EVENT_QUEUE` | `engram.ingest` | Predeclared queue and routing key |
+| `EVENT_DEVICE_NAME` | `reliquary` | Canonical event producer name |
+| `EVENTS_ENABLED` | `true` | Explicit standalone opt-out |
 
 ## Key Design Decisions
 
@@ -127,6 +135,9 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Custom web file picker**: Flutter's `file_picker` package is unreliable on web. A custom implementation using `HTMLInputElement` directly is used for web; native platforms use `file_picker`.
 - **No lifecycle archival**: Active files remain under `files/<user>/...` until explicitly deleted. `backend/worker/archival.go` is a dormant marker only.
 - **Legacy archive restoration**: Run `restore-archive` without flags for a dry-run, then with `-apply` after resolving conflicts.
+- **Explicit file events**: Reliquary is the sole producer for its S3 mutations.
+  Messages are persistent and confirmed, delivery is at least once, and MinIO
+  bucket notifications must remain disabled.
 
 ## Deployment
 
@@ -161,9 +172,10 @@ docker compose up -d    # Available at http://localhost:2080
 
 ### Container Architecture
 
-Single container running three processes:
+Application container running three processes:
 - **MinIO** (`127.0.0.1:9000`) — object storage, internal only
 - **Go backend** (unix socket) — API server
 - **Caddy** (`:2080`) — reverse proxy + static file server for Flutter web
 
-MinIO data persisted via Docker volume. Flutter web build mounted at `/srv/web`.
+Compose adds RabbitMQ with the durable `engram.ingest` queue. MinIO and RabbitMQ
+use separate persistent volumes.

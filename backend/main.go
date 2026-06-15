@@ -14,6 +14,7 @@ import (
 
 	"reliquary-be/auth"
 	"reliquary-be/config"
+	"reliquary-be/event"
 	"reliquary-be/handler"
 	"reliquary-be/storage"
 	"reliquary-be/worker"
@@ -59,10 +60,30 @@ func main() {
 
 	checksums := storage.NewChecksumIndex(store)
 
+	var events event.Emitter
+	if cfg.EventsEnabled {
+		events, err = event.NewRabbitMQEmitter(cfg.RabbitMQURL, cfg.EventQueue)
+		if err != nil {
+			slog.Error("failed to initialize file event publisher", "error", err)
+			os.Exit(1)
+		}
+		slog.Info(
+			"file event publisher ready",
+			"queue",
+			cfg.EventQueue,
+			"device",
+			cfg.EventDeviceName,
+		)
+	} else {
+		slog.Warn("file event publication is disabled; Engram will not track mutations")
+		events = event.DisabledEmitter{}
+	}
+	defer events.Close()
+
 	thumbs := worker.NewThumbnailWorker(store, cfg.ThumbnailWorkers)
 	thumbs.Start(context.Background(), cfg.ThumbnailWorkers)
 
-	h := handler.New(cfg, store, thumbs, checksums)
+	h := handler.New(cfg, store, thumbs, checksums, events)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)

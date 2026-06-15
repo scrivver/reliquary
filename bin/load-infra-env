@@ -7,16 +7,21 @@ if [ -z "${DATA_DIR:-}" ]; then
   return 1 2>/dev/null || exit 1
 fi
 
-if [ ! -f "$MINIO_PORT_FILE" ] || [ ! -f "$MINIO_CONSOLE_PORT_FILE" ]; then
+if [ ! -f "$MINIO_PORT_FILE" ] ||
+   [ ! -f "$MINIO_CONSOLE_PORT_FILE" ] ||
+   [ ! -f "$RABBITMQ_AMQP_PORT_FILE" ]; then
   echo "ERROR: Port files not found. Is infra running? (start-infra)" >&2
   return 1 2>/dev/null || exit 1
 fi
 
 export MINIO_PORT=$(cat "$MINIO_PORT_FILE")
 export MINIO_CONSOLE_PORT=$(cat "$MINIO_CONSOLE_PORT_FILE")
+export RABBITMQ_AMQP_PORT=$(cat "$RABBITMQ_AMQP_PORT_FILE")
+export RABBITMQ_URL="amqp://guest:guest@127.0.0.1:$RABBITMQ_AMQP_PORT"
 
 echo "MINIO_PORT=$MINIO_PORT"
 echo "MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT"
+echo "RABBITMQ_URL=$RABBITMQ_URL"
 
 if [ -f "$PROXY_PORT_FILE" ]; then
   export PROXY_PORT=$(cat "$PROXY_PORT_FILE")

@@ -1,5 +1,7 @@
 # Explicit Storage Event Publication
 
+Status: implemented.
+
 ## Goal
 
 Make the Reliquary backend the authoritative event producer for every user-visible

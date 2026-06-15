@@ -50,7 +50,8 @@ Enter the development shell:
 nix develop
 ```
 
-This sets up all dependencies (Go, Flutter, MinIO, Caddy, ffmpeg, process-compose) and generates the process-compose configuration.
+This sets up all dependencies (Go, Flutter, MinIO, RabbitMQ, Caddy, ffmpeg,
+process-compose) and generates the process-compose configuration.
 
 You can also enter a focused shell for a specific layer:
 
@@ -62,7 +63,7 @@ nix develop .#infra      # Infra tooling only
 
 ### Infrastructure
 
-Start the infrastructure services (MinIO + Caddy reverse proxy):
+Start the infrastructure services (MinIO, RabbitMQ, and Caddy reverse proxy):
 
 ```bash
 start-infra
@@ -88,7 +89,9 @@ The Caddy reverse proxy runs on `http://localhost:2080` and routes:
 
 ### Backend
 
-The backend is a Go API server located in `backend/`. It provides JWT authentication, multi-user management, multipart file upload to MinIO, deduplication, thumbnail generation, and storage analytics.
+The backend is a Go API server located in `backend/`. It provides JWT
+authentication, multipart file upload to MinIO, explicit Engram event
+publication, deduplication, thumbnail generation, and storage analytics.
 
 ```bash
 start-backend            # loads env, runs air (hot reload) on unix socket
@@ -134,6 +137,14 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 | `AUTH_USERNAME` | `admin` | Initial admin / default user |
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
+| `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Broker used for Engram file events |
+| `EVENT_QUEUE` | `engram.ingest` | Predeclared RabbitMQ queue/routing key |
+| `EVENT_DEVICE_NAME` | `reliquary` | Producer name in canonical file events |
+| `EVENTS_ENABLED` | `true` | Set `false` only for standalone operation without Engram |
+
+Uploads and deletes publish canonical persistent messages after the S3 mutation.
+Delivery is at least once. If RabbitMQ does not confirm an event, the API returns
+`503`; retry the same upload or delete to republish it.
 
 #### Auth Modes
 
@@ -190,28 +201,18 @@ Features:
 
 ### Quick Deploy (prebuilt image)
 
-Download the latest prebuilt image from [GitHub Releases](https://github.com/chunhou/vault/releases) and run:
+Download the latest prebuilt image and release Compose files from
+[GitHub Releases](https://github.com/chunhou/vault/releases), then run:
 
 ```bash
 # Load the image
 docker load < reliquary-full.tar.gz
 # or: podman load < reliquary-full.tar.gz
 
-# Run
-docker run -d --name reliquary \
-  -p 2080:2080 \
-  -v reliquary_data:/data/minio \
-  -e JWT_SECRET=change-me-in-production \
-  -e AUTH_PASSWORD=change-me-in-production \
-  reliquary:latest
-
-# or with podman:
-podman run -d --name reliquary \
-  -p 2080:2080 \
-  -v reliquary_data:/data/minio \
-  -e JWT_SECRET=change-me-in-production \
-  -e AUTH_PASSWORD=change-me-in-production \
-  reliquary:latest
+cp .env.example .env
+# Edit passwords and JWT_SECRET, then:
+docker compose up -d
+# or: podman compose up -d
 ```
 
 The application is available at `http://localhost:2080`. Default credentials: `admin` / `admin`.
@@ -271,6 +272,9 @@ All configuration is via environment variables in `.env`:
 | `AUTH_PASSWORD` | `admin` | Initial admin password |
 | `JWT_SECRET` | — | JWT signing secret (must change for production) |
 | `THUMBNAIL_WORKERS` | `4` | Concurrent thumbnail workers |
+| `EVENT_QUEUE` | `engram.ingest` | RabbitMQ queue/routing key |
+| `EVENT_DEVICE_NAME` | `reliquary` | Event producer name |
+| `EVENTS_ENABLED` | `true` | Explicitly disable Engram events |
 
 ### Restoring Data From Older Releases
 
@@ -300,12 +304,13 @@ overwrites active objects, and rebuilds per-user checksum indexes.
 
 ### Architecture
 
-The container runs three processes managed by the entrypoint script:
+The application container runs three processes managed by the entrypoint script:
 - **MinIO** — object storage on `127.0.0.1:9000` (internal only)
 - **Go backend** — API server on a unix socket
 - **Caddy** — reverse proxy on `:2080`, serves Flutter web build, routes `/api/*` and `/storage/*`
 
-MinIO data is persisted via a Docker volume (`minio_data`).
+Compose also runs RabbitMQ with the durable `engram.ingest` queue. MinIO and
+RabbitMQ data are persisted via `minio_data` and `rabbitmq_data`.
 
 ### Mobile Apps
 
@@ -332,6 +337,7 @@ If you prefer to set up each component manually:
 - [Go](https://go.dev/) 1.22+
 - [Flutter](https://flutter.dev/) 3.x
 - [MinIO](https://min.io/) server and client (`mc`)
+- [RabbitMQ](https://www.rabbitmq.com/) 4.x
 - [Caddy](https://caddyserver.com/) 2.x
 - [ffmpeg](https://ffmpeg.org/) (optional, for video thumbnails)
 
@@ -349,13 +355,20 @@ mc mb --ignore-existing local/reliquary
 mc anonymous set download local/reliquary
 ```
 
-#### 2. Build and run the Go backend
+#### 2. Start RabbitMQ
+
+Start RabbitMQ and declare a durable `engram.ingest` queue bound to
+`amq.direct` with routing key `engram.ingest`. Queue topology is an
+infrastructure responsibility; the backend validates it but does not create it.
+
+#### 3. Build and run the Go backend
 
 ```bash
 cd backend
 go build -o reliquary-be .
 
 MINIO_PORT=9000 \
+RABBITMQ_URL=amqp://guest:guest@127.0.0.1:5672 \
 LISTEN_ADDR=/tmp/reliquary-backend.sock \
 JWT_SECRET=your-secret-here \
 AUTH_USERNAME=admin \
@@ -363,14 +376,14 @@ AUTH_PASSWORD=your-password \
   ./reliquary-be
 ```
 
-#### 3. Build Flutter web
+#### 4. Build Flutter web
 
 ```bash
 cd frontend
 flutter build web --release
 ```
 
-#### 4. Configure and run Caddy
+#### 5. Configure and run Caddy
 
 Create a `Caddyfile`:
 
