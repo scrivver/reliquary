@@ -331,6 +331,12 @@ flutter build ipa --release
 
 Set the server URL on the login screen to point to your deployment (e.g., `http://192.168.1.100:2080`).
 
+GitHub Actions also builds the Android release APK on frontend changes. Pull
+requests and branch pushes publish it as a workflow artifact; `v*` tags also
+attach the APK to the matching GitHub Release. The current Android release build
+uses the debug signing config, so treat it as an installable test artifact until
+production signing keys are configured.
+
 ### Manual Setup (without Nix or containers)
 
 If you prefer to set up each component manually:
