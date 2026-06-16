@@ -203,23 +203,27 @@ Features:
 
 ## Deployment
 
-### Quick Deploy (prebuilt image)
+### Docker Compose Usage
 
-Download the latest prebuilt image and release Compose files from
-[GitHub Releases](https://github.com/chunhou/vault/releases), then run:
+The default `docker-compose.yml` starts separate `ingress`, `api`,
+`thumbnail-worker`, `minio`, `minio-init`, and `rabbitmq` services. It expects
+the Reliquary images to exist locally unless you change the image names to a
+registry path such as `ghcr.io/scrivver/reliquary-api:latest`.
+
+For local testing, build and load the images first:
 
 ```bash
-# Load the image
-docker load < reliquary-full.tar.gz
-# or: podman load < reliquary-full.tar.gz
+nix develop
+./bin/deploy
 
 cp .env.example .env
-# Edit passwords and JWT_SECRET, then:
+# Edit passwords and JWT_SECRET before production use.
 docker compose up -d
-# or: podman compose up -d
 ```
 
-The application is available at `http://localhost:2080`. Default credentials: `admin` / `admin`.
+The application is available at `http://localhost:2080`. With the checked-in
+Compose defaults, the initial Reliquary login is `admin` /
+`change-me-in-production`; change it in `.env` before real use.
 
 ### Build from Source
 
@@ -253,22 +257,27 @@ The application is available at `http://localhost:2080`.
 
 ### Configuration
 
-All configuration is via environment variables in `.env`:
+Container configuration is provided through `.env` and consumed by
+`docker-compose.yml`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RELIQUARY_PORT` | `2080` | Host port to expose |
-| `MINIO_ROOT_USER` | `minioadmin` | MinIO admin username |
-| `MINIO_ROOT_PASSWORD` | `minioadmin` | MinIO admin password |
+| `RELIQUARY_PORT` | `2080` | Host port mapped to ingress port `2080` |
+| `PROXY_BASE_URL` | `http://localhost:2080` | Public URL used when generating storage links |
+| `MINIO_ROOT_USER` | `minioadmin` | MinIO root username |
+| `MINIO_ROOT_PASSWORD` | `change-me-in-production` | MinIO root password |
 | `MINIO_BUCKET` | `reliquary` | MinIO bucket name |
-| `AUTH_USERNAME` | `admin` | Initial admin username |
-| `AUTH_PASSWORD` | `admin` | Initial admin password |
-| `JWT_SECRET` | — | JWT signing secret (must change for production) |
-| `EVENT_QUEUE` | `engram.ingest` | RabbitMQ queue/routing key |
-| `EVENT_DEVICE_NAME` | `reliquary` | Event producer name |
-| `EVENTS_ENABLED` | `true` | Explicitly disable Engram events |
-| `THUMBNAIL_QUEUE` | `reliquary.thumbnail` | Durable thumbnail queue |
-| `THUMBNAIL_CONCURRENCY` | `4` | Worker process concurrency |
+| `AUTH_MODE` | `full` | Authentication mode: `full`, `proxy`, `none`, or `oidc` |
+| `AUTH_USERNAME` | `admin` | Initial admin username seeded on first startup |
+| `AUTH_PASSWORD` | `change-me-in-production` | Initial admin password seeded on first startup |
+| `JWT_SECRET` | `change-me-in-production` | JWT signing secret; must be unique in production |
+| `EVENTS_ENABLED` | `true` | Publish explicit file events for downstream consumers |
+| `EVENT_QUEUE` | `engram.ingest` | RabbitMQ queue/routing key for file events |
+| `EVENT_DEVICE_NAME` | `reliquary` | Device name written into emitted file events |
+| `THUMBNAIL_QUEUE` | `reliquary.thumbnail` | RabbitMQ queue/routing key for thumbnail jobs |
+| `THUMBNAIL_DEAD_QUEUE` | `reliquary.thumbnail.dead` | Queue for malformed or exhausted thumbnail jobs |
+| `THUMBNAIL_PREFETCH` | `1` | Jobs prefetched per worker slot |
+| `THUMBNAIL_CONCURRENCY` | `4` | Concurrent thumbnail jobs per worker container |
 | `THUMBNAIL_MAX_ATTEMPTS` | `5` | Attempts before dead-lettering |
 
 ### Restoring Data From Older Releases
