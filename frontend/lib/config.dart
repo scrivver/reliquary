@@ -1,10 +1,27 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppConfig {
-  static const String defaultApiBaseUrl = 'http://localhost:2080';
+  static const String _fallbackApiBaseUrl = 'http://localhost:2080';
+  static const String _configuredDefaultApiBaseUrl = String.fromEnvironment(
+    'RELIQUARY_DEFAULT_API_BASE_URL',
+  );
   static const String _prefsKey = 'api_base_url';
 
   static String apiBaseUrl = defaultApiBaseUrl;
+
+  static String get defaultApiBaseUrl {
+    if (_configuredDefaultApiBaseUrl.isNotEmpty) {
+      return _configuredDefaultApiBaseUrl;
+    }
+
+    final base = Uri.base;
+    if ((base.scheme == 'http' || base.scheme == 'https') &&
+        base.host.isNotEmpty) {
+      return base.origin;
+    }
+
+    return _fallbackApiBaseUrl;
+  }
 
   /// Load the saved API base URL from shared preferences.
   static Future<void> load() async {
