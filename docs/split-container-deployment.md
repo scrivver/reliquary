@@ -2,7 +2,8 @@
 
 The default Compose deployment separates runtime responsibilities:
 
-- `ingress`: Caddy and the Flutter web build; the only public service.
+- `ingress`: `reliquary-web`, which contains Caddy and the Flutter web build;
+  the only public service.
 - `api`: Reliquary HTTP API and durable event/job publishers.
 - `thumbnail-worker`: RabbitMQ consumer and media rendering tools.
 - `minio`: persistent S3-compatible object storage.
@@ -18,7 +19,7 @@ The checked-in `docker-compose.yml` references local application image names:
 
 - `reliquary-api:latest`
 - `reliquary-thumbnail-worker:latest`
-- `reliquary-ingress:latest`
+- `reliquary-web:latest`
 
 Build and load them before starting Compose:
 
@@ -30,10 +31,10 @@ cp .env.example .env
 docker compose up -d
 ```
 
-`./bin/deploy` builds the Flutter web app, builds the three Nix container
-outputs, and loads the resulting tarballs into Docker or Podman. The Flutter
-build is mounted read-only from `frontend/build/web`. The deployment is
-available at `http://localhost:2080`.
+`./bin/deploy` builds the three Nix container outputs and loads the resulting
+tarballs into Docker or Podman. The `reliquary-web` image contains the Flutter
+web build at `/srv/web`, so Compose does not need a host-side frontend bind
+mount. The deployment is available at `http://localhost:2080`.
 
 When using published images, change the Compose image names to their registry
 locations, for example:
@@ -44,7 +45,7 @@ api:
 thumbnail-worker:
   image: ghcr.io/scrivver/reliquary-thumbnail-worker:latest
 ingress:
-  image: ghcr.io/scrivver/reliquary-ingress:latest
+  image: ghcr.io/scrivver/reliquary-web:latest
 ```
 
 Use SHA or version tags instead of `latest` for reproducible production
@@ -58,8 +59,9 @@ curl --fail http://localhost:2080/api/health
 docker compose logs api thumbnail-worker
 ```
 
-Only ingress publishes a host port. MinIO and RabbitMQ remain on the internal
-Compose network. Their data is stored in `minio_data` and `rabbitmq_data`.
+Only the web/ingress service publishes a host port. MinIO and RabbitMQ remain on
+the internal Compose network. Their data is stored in `minio_data` and
+`rabbitmq_data`.
 
 ## Environment Variables
 

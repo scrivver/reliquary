@@ -7,6 +7,7 @@ on:
       - "**/*.go"
       - "**/*.nix"
       - "docker/**"
+      - "frontend/**"
       - "go.mod"
       - "go.sum"
   push:
@@ -19,6 +20,7 @@ on:
       - "**/*.go"
       - "**/*.nix"
       - "docker/**"
+      - "frontend/**"
       - "go.mod"
       - "go.sum"
   workflow_dispatch:
@@ -26,6 +28,9 @@ on:
 permissions:
   contents: read
   packages: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 concurrency:
   group: containers-${{ github.ref }}
@@ -41,8 +46,8 @@ jobs:
         include:
           - derivation: api-container
             image: reliquary-api
-          - derivation: ingress-container
-            image: reliquary-ingress
+          - derivation: web-container
+            image: reliquary-web
           - derivation: thumbnail-worker-container
             image: reliquary-thumbnail-worker
           - derivation: container

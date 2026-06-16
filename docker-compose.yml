@@ -100,7 +100,7 @@ services:
       retries: 3
 
   ingress:
-    image: reliquary-ingress:latest
+    image: reliquary-web:latest
     restart: unless-stopped
     depends_on:
       api:
@@ -109,10 +109,8 @@ services:
         condition: service_started
     ports:
       - "${RELIQUARY_PORT:-2080}:2080"
-    volumes:
-      - ./frontend/build/web:/srv/web:ro
     healthcheck:
-      test: ["CMD", "reliquary-ingress-healthcheck"]
+      test: ["CMD", "reliquary-web-healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 12

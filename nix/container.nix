@@ -2,6 +2,7 @@
 
 let
   backend = import ./backend.nix { inherit pkgs; };
+  frontendWeb = import ./frontend-web.nix { inherit pkgs; };
 
   caddyfile = pkgs.writeText "Caddyfile" ''
     {
@@ -133,6 +134,7 @@ pkgs.dockerTools.buildLayeredImage {
 
   extraCommands = ''
     mkdir -p srv/web run/reliquary data/minio tmp etc
+    cp -R ${frontendWeb}/. srv/web/
     echo "root:x:0:0:root:/root:/bin/bash" > etc/passwd
     echo "root:x:0:" > etc/group
   '';

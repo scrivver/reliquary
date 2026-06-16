@@ -16,10 +16,6 @@ fi
 echo "Using container runtime: $CTR"
 echo "=== Building Reliquary split-container deployment ==="
 
-echo "Building Flutter web..."
-cd "$PROJECT_ROOT/frontend"
-flutter build web --release
-
 cd "$PROJECT_ROOT"
 BUILD_ROOT=$(mktemp -d)
 trap 'rm -rf "$BUILD_ROOT"' EXIT
@@ -27,11 +23,11 @@ rsync -a \
   --exclude .git \
   --exclude .data \
   --exclude .dart_tool \
-  --exclude build \
+  --exclude frontend/build \
   --exclude 'result*' \
   "$PROJECT_ROOT/" "$BUILD_ROOT/"
 
-for target in api-container thumbnail-worker-container ingress-container; do
+for target in api-container thumbnail-worker-container web-container; do
   echo "Building $target..."
   image_path=$(nix build "path:$BUILD_ROOT#$target" --no-link --print-out-paths)
   "$CTR" load < "$image_path"

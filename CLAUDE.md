@@ -164,14 +164,16 @@ docker compose up -d    # Available at http://localhost:2080
 ### Nix Build Targets
 
 - `nix build .#backend` — API, thumbnail worker, and restore binaries
+- `nix build .#frontend-web` — Flutter web static assets
 - `nix build .#api-container` — dedicated API image
 - `nix build .#thumbnail-worker-container` — dedicated thumbnail worker image
-- `nix build .#ingress-container` — Caddy ingress image
+- `nix build .#web-container` — Caddy plus Flutter web image
+- `nix build .#ingress-container` — legacy Caddy-only ingress image
 - `nix build .#container` — retained all-in-one image
 
 ### Container Architecture
 
-The default Compose file separates Caddy ingress, API, thumbnail worker, MinIO,
-and RabbitMQ. `minio-init` creates the storage bucket before the API and worker
-start. `bin/deploy-all-in-one` and `docker-compose.all-in-one.yml` preserve the
-combined deployment.
+The default Compose file separates the Caddy-backed web image, API, thumbnail
+worker, MinIO, and RabbitMQ. `minio-init` creates the storage bucket before the
+API and worker start. `bin/deploy-all-in-one` and
+`docker-compose.all-in-one.yml` preserve the combined deployment.

@@ -208,7 +208,8 @@ Features:
 The default `docker-compose.yml` starts separate `ingress`, `api`,
 `thumbnail-worker`, `minio`, `minio-init`, and `rabbitmq` services. It expects
 the Reliquary images to exist locally unless you change the image names to a
-registry path such as `ghcr.io/scrivver/reliquary-api:latest`.
+registry path such as `ghcr.io/scrivver/reliquary-api:latest` or
+`ghcr.io/scrivver/reliquary-web:latest`.
 
 For local testing, build and load the images first:
 
@@ -230,7 +231,7 @@ Compose defaults, the initial Reliquary login is `admin` /
 Requires [Nix](https://nixos.org/) with flakes enabled and [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/).
 
 ```bash
-# Build the Flutter web app and load the API, worker, and ingress images
+# Build and load the API, worker, and web images
 nix develop
 ./bin/deploy
 ```
@@ -308,9 +309,9 @@ overwrites active objects, and rebuilds per-user checksum indexes.
 
 ### Architecture
 
-The default Compose deployment runs separate ingress, API, thumbnail worker,
-MinIO, and RabbitMQ containers. Only ingress publishes port `2080`; storage and
-queue traffic stays on the internal network. See
+The default Compose deployment runs separate web, API, thumbnail worker, MinIO,
+and RabbitMQ containers. Only the web container publishes port `2080`; storage
+and queue traffic stays on the internal network. See
 [`docs/split-container-deployment.md`](docs/split-container-deployment.md) for
 build, scaling, health-check, and all-in-one compatibility instructions.
 
