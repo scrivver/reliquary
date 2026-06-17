@@ -27,13 +27,16 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() => _loading = true);
     try {
       final users = await widget.apiService.listUsers();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _users = users;
           _loading = false;
         });
+      }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
