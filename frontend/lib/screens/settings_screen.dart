@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../config.dart';
 import '../services/api_service.dart';
@@ -52,8 +51,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text('Server URL saved. Restart the app to apply.',
-              style: GoogleFonts.spaceMono(fontSize: 13))),
+        content: Text(
+          'Server URL saved. Restart the app to apply.',
+          style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+        ),
+      ),
     );
   }
 
@@ -64,8 +66,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text('Reset to default. Restart the app to apply.',
-              style: GoogleFonts.spaceMono(fontSize: 13))),
+        content: Text(
+          'Reset to default. Restart the app to apply.',
+          style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+        ),
+      ),
     );
   }
 
@@ -79,14 +84,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       _newPasswordController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password changed successfully',
-            style: GoogleFonts.spaceMono(fontSize: 13))),
+        SnackBar(
+          content: Text(
+            'Password changed successfully',
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to change password: $e',
-            style: GoogleFonts.spaceMono(fontSize: 13))),
+        SnackBar(
+          content: Text(
+            'Failed to change password: $e',
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          ),
+        ),
       );
     }
   }
@@ -97,7 +110,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: Text(
           'SYSTEM_CONFIG',
-          style: GoogleFonts.spaceGrotesk(
+          style: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
           ),
@@ -111,16 +125,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _urlController,
-            style: GoogleFonts.spaceMono(fontSize: 14),
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
             decoration: InputDecoration(
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
               ),
               hintText: 'http://192.168.1.100:2080',
-              hintStyle: GoogleFonts.spaceMono(
+              hintStyle: TextStyle(
+                fontFamily: 'Space Mono',
                 fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.3),
               ),
             ),
             keyboardType: TextInputType.url,
@@ -133,10 +150,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: FilledButton(
                   style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
                   onPressed: _save,
-                  child: Text('SAVE', style: GoogleFonts.spaceGrotesk(
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.0,
-                  )),
+                  child: Text(
+                    'SAVE',
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -146,10 +167,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: _kAccentRed,
                 ),
                 onPressed: _reset,
-                child: Text('RESET_DEFAULT', style: GoogleFonts.spaceGrotesk(
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8,
-                )),
+                child: Text(
+                  'RESET_DEFAULT',
+                  style: TextStyle(
+                    fontFamily: 'Space Grotesk',
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
               ),
             ],
           ),
@@ -157,9 +182,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(
             'Change the server URL to connect to a different Reliquary instance '
             '(e.g., a portable drive on your local network).',
-            style: GoogleFonts.spaceMono(
+            style: TextStyle(
+              fontFamily: 'Space Mono',
               fontSize: 11,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
 
@@ -172,10 +200,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             TextField(
               controller: _newPasswordController,
-              style: GoogleFonts.spaceMono(fontSize: 14),
+              style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
               decoration: InputDecoration(
                 labelText: 'NEW_PASSWORD',
-                labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+                labelStyle: TextStyle(
+                  fontFamily: 'Space Mono',
+                  fontSize: 12,
+                  letterSpacing: 1.0,
+                ),
                 border: const OutlineInputBorder(),
                 focusedBorder: const OutlineInputBorder(
                   borderSide: BorderSide(color: _kAccentRed),
@@ -188,10 +220,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
               onPressed: _changePassword,
-              child: Text('CHANGE_PASSWORD', style: GoogleFonts.spaceGrotesk(
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.0,
-              )),
+              child: Text(
+                'CHANGE_PASSWORD',
+                style: TextStyle(
+                  fontFamily: 'Space Grotesk',
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0,
+                ),
+              ),
             ),
           ],
         ],
@@ -206,11 +242,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(width: 8),
         Text(
           title,
-          style: GoogleFonts.spaceGrotesk(
+          style: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontSize: 14,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       ],

@@ -23,7 +23,8 @@ class FileItem {
     return FileItem(
       key: json['key'] as String,
       size: (json['size'] as num).toInt(),
-      contentType: (json['content_type'] as String?) ?? 'application/octet-stream',
+      contentType:
+          (json['content_type'] as String?) ?? 'application/octet-stream',
       lastModified: DateTime.parse(json['last_modified'] as String),
       thumbnailKey: json['thumbnail_key'] as String?,
       checksum: json['checksum'] as String?,

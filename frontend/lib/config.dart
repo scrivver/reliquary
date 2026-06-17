@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppConfig {
-  static const String _fallbackApiBaseUrl = 'http://localhost:2080';
+  static const String _fallbackApiBaseUrl = 'https://reliquary.chunhou20c.dev';
   static const String _configuredDefaultApiBaseUrl = String.fromEnvironment(
     'RELIQUARY_DEFAULT_API_BASE_URL',
   );

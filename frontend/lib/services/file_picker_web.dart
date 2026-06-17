@@ -45,12 +45,14 @@ Future<List<UploadFile>?> _pick({
       final bytes = await _readFileBytes(file);
       final relativePath = file.webkitRelativePath;
 
-      uploadFiles.add(UploadFile(
-        name: file.name,
-        size: file.size,
-        bytes: bytes,
-        relativePath: relativePath.isNotEmpty ? relativePath : null,
-      ));
+      uploadFiles.add(
+        UploadFile(
+          name: file.name,
+          size: file.size,
+          bytes: bytes,
+          relativePath: relativePath.isNotEmpty ? relativePath : null,
+        ),
+      );
     }
 
     if (!completer.isCompleted) {

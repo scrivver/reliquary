@@ -14,7 +14,6 @@ dependencies:
   file_picker: ^8.1.7
   mime: ^2.0.0
   shared_preferences: ^2.5.4
-  google_fonts: ^8.0.2
   url_launcher: ^6.3.2
   web: ^1.1.1
 
@@ -25,3 +24,20 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Space Grotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk.ttf
+          weight: 400
+        - asset: assets/fonts/SpaceGrotesk.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk.ttf
+          weight: 600
+        - asset: assets/fonts/SpaceGrotesk.ttf
+          weight: 700
+    - family: Space Mono
+      fonts:
+        - asset: assets/fonts/SpaceMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SpaceMono-Bold.ttf
+          weight: 700

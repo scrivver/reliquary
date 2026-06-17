@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class ReliquaryTheme {
   static const Color primary = Color(0xFFEC3713);
@@ -13,59 +12,71 @@ class ReliquaryTheme {
 
   static ThemeData get light {
     final base = ThemeData.light(useMaterial3: true);
-    final textTheme = GoogleFonts.spaceGroteskTextTheme(base.textTheme).copyWith(
-      headlineLarge: GoogleFonts.spaceGrotesk(
-        fontSize: 28,
-        fontWeight: FontWeight.w700,
-        color: textPrimary,
-        letterSpacing: -0.5,
-      ),
-      headlineMedium: GoogleFonts.spaceGrotesk(
-        fontSize: 22,
-        fontWeight: FontWeight.w700,
-        color: textPrimary,
-      ),
-      headlineSmall: GoogleFonts.spaceGrotesk(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: textPrimary,
-      ),
-      titleLarge: GoogleFonts.spaceGrotesk(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        color: textPrimary,
-        letterSpacing: 0.5,
-      ),
-      titleMedium: GoogleFonts.spaceGrotesk(
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: textPrimary,
-        letterSpacing: 1.0,
-      ),
-      bodyLarge: GoogleFonts.spaceGrotesk(
-        fontSize: 14,
-        color: textPrimary,
-      ),
-      bodyMedium: GoogleFonts.spaceGrotesk(
-        fontSize: 13,
-        color: textSecondary,
-      ),
-      bodySmall: GoogleFonts.spaceGrotesk(
-        fontSize: 11,
-        color: textSecondary,
-        letterSpacing: 0.5,
-      ),
-      labelLarge: GoogleFonts.spaceGrotesk(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-      ),
-      labelSmall: GoogleFonts.spaceMono(
-        fontSize: 10,
-        color: textSecondary,
-        letterSpacing: 0.8,
-      ),
-    );
+    final textTheme = base.textTheme
+        .apply(fontFamily: 'Space Grotesk')
+        .copyWith(
+          headlineLarge: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
+            letterSpacing: -0.5,
+          ),
+          headlineMedium: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
+          ),
+          headlineSmall: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+          ),
+          titleLarge: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+            letterSpacing: 0.5,
+          ),
+          titleMedium: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: textPrimary,
+            letterSpacing: 1.0,
+          ),
+          bodyLarge: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 14,
+            color: textPrimary,
+          ),
+          bodyMedium: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 13,
+            color: textSecondary,
+          ),
+          bodySmall: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 11,
+            color: textSecondary,
+            letterSpacing: 0.5,
+          ),
+          labelLarge: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+          ),
+          labelSmall: TextStyle(
+            fontFamily: 'Space Mono',
+            fontSize: 10,
+            color: textSecondary,
+            letterSpacing: 0.8,
+          ),
+        );
 
     return base.copyWith(
       colorScheme: ColorScheme.fromSeed(
@@ -81,7 +92,8 @@ class ReliquaryTheme {
         foregroundColor: textPrimary,
         elevation: 0,
         scrolledUnderElevation: 1,
-        titleTextStyle: GoogleFonts.spaceGrotesk(
+        titleTextStyle: TextStyle(
+          fontFamily: 'Space Grotesk',
           fontSize: 16,
           fontWeight: FontWeight.w700,
           color: textPrimary,
@@ -100,10 +112,9 @@ class ReliquaryTheme {
         style: FilledButton.styleFrom(
           backgroundColor: primary,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          textStyle: GoogleFonts.spaceGrotesk(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontWeight: FontWeight.w600,
             letterSpacing: 1.0,
           ),
@@ -113,10 +124,9 @@ class ReliquaryTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           side: const BorderSide(color: border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          textStyle: GoogleFonts.spaceGrotesk(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontWeight: FontWeight.w600,
             letterSpacing: 1.0,
           ),
@@ -135,18 +145,23 @@ class ReliquaryTheme {
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
-        labelStyle: GoogleFonts.spaceGrotesk(
+        labelStyle: TextStyle(
+          fontFamily: 'Space Grotesk',
           fontSize: 12,
           letterSpacing: 1.0,
           color: textSecondary,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: background,
         indicatorColor: primary.withValues(alpha: 0.1),
         labelTextStyle: WidgetStatePropertyAll(
-          GoogleFonts.spaceGrotesk(
+          TextStyle(
+            fontFamily: 'Space Grotesk',
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.0,
@@ -158,13 +173,15 @@ class ReliquaryTheme {
         indicatorColor: primary.withValues(alpha: 0.2),
         selectedIconTheme: const IconThemeData(color: primary),
         unselectedIconTheme: const IconThemeData(color: Colors.white54),
-        selectedLabelTextStyle: GoogleFonts.spaceGrotesk(
+        selectedLabelTextStyle: TextStyle(
+          fontFamily: 'Space Grotesk',
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: primary,
           letterSpacing: 1.0,
         ),
-        unselectedLabelTextStyle: GoogleFonts.spaceGrotesk(
+        unselectedLabelTextStyle: TextStyle(
+          fontFamily: 'Space Grotesk',
           fontSize: 10,
           color: Colors.white54,
           letterSpacing: 1.0,

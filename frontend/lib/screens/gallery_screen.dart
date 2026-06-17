@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
@@ -69,8 +68,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
     });
 
     try {
-      final result =
-          await widget.apiService.listFiles(offset: 0, limit: _pageSize);
+      final result = await widget.apiService.listFiles(
+        offset: 0,
+        limit: _pageSize,
+      );
       if (!mounted) return;
       setState(() {
         _files
@@ -124,8 +125,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DELETE',
-                style: TextStyle(color: Color(0xFFEC3713))),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: Color(0xFFEC3713)),
+            ),
           ),
         ],
       ),
@@ -137,9 +140,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _loadFiles();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to delete file')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to delete file')));
     }
   }
 
@@ -149,9 +152,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to download file')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to download file')));
     }
   }
 
@@ -168,43 +171,43 @@ class _GalleryScreenState extends State<GalleryScreen> {
       final url = await widget.apiService.presignDownload(file.key);
       if (!mounted) return;
 
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
             backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            title: Text(file.originalName ?? file.filename),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.info_outline),
-                onPressed: () => _showFileDetails(file),
-                tooltip: 'DETAILS',
-              ),
-              IconButton(
-                icon: const Icon(Icons.download),
-                onPressed: () async {
-                  final downloadUrl =
-                      await widget.apiService.presignDownloadForSave(file.key);
-                  launchUrl(Uri.parse(downloadUrl),
-                      mode: LaunchMode.externalApplication);
-                },
-                tooltip: 'DOWNLOAD',
-              ),
-            ],
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              child: Image.network(url),
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+              title: Text(file.originalName ?? file.filename),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  onPressed: () => _showFileDetails(file),
+                  tooltip: 'DETAILS',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: () async {
+                    final downloadUrl = await widget.apiService
+                        .presignDownloadForSave(file.key);
+                    launchUrl(
+                      Uri.parse(downloadUrl),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  },
+                  tooltip: 'DOWNLOAD',
+                ),
+              ],
             ),
+            body: Center(child: InteractiveViewer(child: Image.network(url))),
           ),
         ),
-      ));
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to load image')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to load image')));
     }
   }
 
@@ -219,7 +222,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
           children: [
             _detailRow('TYPE', file.contentType),
             _detailRow('SIZE', _formatSize(file.size)),
-            if (file.uploadDate != null) _detailRow('UPLOADED', file.uploadDate!),
+            if (file.uploadDate != null)
+              _detailRow('UPLOADED', file.uploadDate!),
             if (file.checksum != null)
               _detailRow('SHA-256', '${file.checksum!.substring(0, 16)}...'),
           ],
@@ -230,8 +234,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
               Navigator.pop(ctx);
               _deleteFile(file);
             },
-            child: const Text('DELETE',
-                style: TextStyle(color: Color(0xFFEC3713))),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: Color(0xFFEC3713)),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -257,9 +263,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
         children: [
           SizedBox(
             width: 80,
-            child: Text(label,
-                style: GoogleFonts.spaceMono(
-                    fontSize: 10, color: Colors.grey, letterSpacing: 0.5)),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 10,
+                color: Colors.grey,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
         ],
@@ -310,8 +322,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DELETE',
-                style: TextStyle(color: Color(0xFFEC3713))),
+            child: const Text(
+              'DELETE',
+              style: TextStyle(color: Color(0xFFEC3713)),
+            ),
           ),
         ],
       ),
@@ -323,9 +337,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
         await widget.apiService.deleteFile(key);
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
         break;
       }
     }
@@ -340,13 +354,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
       if (keys.length == 1) {
         // Single file on web — direct download.
         try {
-          final url = await widget.apiService.presignDownloadForSave(keys.first);
+          final url = await widget.apiService.presignDownloadForSave(
+            keys.first,
+          );
           await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to download: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to download: $e')));
           return;
         }
       } else {
@@ -354,19 +370,24 @@ class _GalleryScreenState extends State<GalleryScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Preparing ${keys.length} files for download...',
-                  style: GoogleFonts.spaceMono(fontSize: 12))),
+            content: Text(
+              'Preparing ${keys.length} files for download...',
+              style: TextStyle(fontFamily: 'Space Mono', fontSize: 12),
+            ),
+          ),
         );
         try {
           final zipBytes = await widget.apiService.batchDownload(keys);
           if (!mounted) return;
           dl.triggerDownload(
-              Uint8List.fromList(zipBytes), 'reliquary-download.zip');
+            Uint8List.fromList(zipBytes),
+            'reliquary-download.zip',
+          );
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to download: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to download: $e')));
           return;
         }
       }
@@ -379,9 +400,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to download: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to download: $e')));
         return;
       }
     }
@@ -390,8 +411,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-          content: Text('${keys.length} file(s) downloaded',
-              style: GoogleFonts.spaceMono(fontSize: 12))),
+        content: Text(
+          '${keys.length} file(s) downloaded',
+          style: TextStyle(fontFamily: 'Space Mono', fontSize: 12),
+        ),
+      ),
     );
   }
 
@@ -406,25 +430,38 @@ class _GalleryScreenState extends State<GalleryScreen> {
               )
             : null,
         title: _selectMode
-            ? Text('${_selected.length} SELECTED',
-                style: GoogleFonts.spaceMono(
-                    fontSize: 14, fontWeight: FontWeight.w700))
+            ? Text(
+                '${_selected.length} SELECTED',
+                style: TextStyle(
+                  fontFamily: 'Space Mono',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
             : Row(
                 children: [
-                  Text('FILES_ROOT',
-                      style: GoogleFonts.spaceMono(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(
+                    'FILES_ROOT',
+                    style: TextStyle(
+                      fontFamily: 'Space Mono',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(width: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEC3713).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       _username.toUpperCase(),
-                      style: GoogleFonts.spaceMono(
+                      style: TextStyle(
+                        fontFamily: 'Space Mono',
                         fontSize: 10,
                         color: const Color(0xFFEC3713),
                         fontWeight: FontWeight.w600,
@@ -446,8 +483,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   tooltip: 'DOWNLOAD',
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      size: 20, color: Color(0xFFEC3713)),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Color(0xFFEC3713),
+                  ),
                   onPressed: _selected.isEmpty ? null : _deleteSelected,
                   tooltip: 'DELETE',
                 ),
@@ -459,8 +499,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     child: Center(
                       child: Text(
                         '$_totalCount ITEMS',
-                        style: GoogleFonts.spaceMono(
-                            fontSize: 10, color: Colors.grey),
+                        style: TextStyle(
+                          fontFamily: 'Space Mono',
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
                       ),
                     ),
                   ),
@@ -485,9 +528,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
               backgroundColor: const Color(0xFFEC3713),
               foregroundColor: Colors.white,
               onPressed: () async {
-                await Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => UploadScreen(apiService: widget.apiService),
-                ));
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => UploadScreen(apiService: widget.apiService),
+                  ),
+                );
                 _loadFiles();
               },
               child: const Icon(Icons.add),
@@ -520,11 +565,15 @@ class _GalleryScreenState extends State<GalleryScreen> {
           children: [
             Icon(Icons.folder_open, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
-            Text('VAULT_EMPTY',
-                style: GoogleFonts.spaceMono(color: Colors.grey)),
+            Text(
+              'VAULT_EMPTY',
+              style: TextStyle(fontFamily: 'Space Mono', color: Colors.grey),
+            ),
             const SizedBox(height: 4),
-            Text('Tap + to deposit artifacts',
-                style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+            Text(
+              'Tap + to deposit artifacts',
+              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            ),
           ],
         ),
       );
@@ -613,8 +662,9 @@ class _FileTileState extends State<_FileTile> {
 
   Future<void> _loadThumbnail() async {
     try {
-      final url =
-          await widget.apiService.presignDownload(widget.file.thumbnailKey!);
+      final url = await widget.apiService.presignDownload(
+        widget.file.thumbnailKey!,
+      );
       if (mounted) setState(() => _thumbUrl = url);
     } catch (_) {}
   }
@@ -647,9 +697,9 @@ class _FileTileState extends State<_FileTile> {
                   ? Image.network(
                       _thumbUrl!,
                       fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => _placeholder(),
-                )
-              : _placeholder(),
+                      errorBuilder: (_, _, _) => _placeholder(),
+                    )
+                  : _placeholder(),
             ),
             if (inSelectMode)
               Positioned(
@@ -664,9 +714,7 @@ class _FileTileState extends State<_FileTile> {
                         : Colors.white.withValues(alpha: 0.8),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFFEC3713)
-                          : Colors.grey,
+                      color: isSelected ? const Color(0xFFEC3713) : Colors.grey,
                     ),
                   ),
                   child: isSelected
@@ -695,7 +743,11 @@ class _FileTileState extends State<_FileTile> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               widget.file.filename,
-              style: GoogleFonts.spaceMono(fontSize: 9, color: Colors.grey),
+              style: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 9,
+                color: Colors.grey,
+              ),
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
               textAlign: TextAlign.center,

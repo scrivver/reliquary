@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
 
@@ -28,7 +27,11 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() => _loading = true);
     try {
       final users = await widget.apiService.listUsers();
-      if (mounted) setState(() { _users = users; _loading = false; });
+      if (mounted)
+        setState(() {
+          _users = users;
+          _loading = false;
+        });
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
@@ -51,7 +54,12 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to create user: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
+        SnackBar(
+          content: Text(
+            'Failed to create user: $e',
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          ),
+        ),
       );
     }
   }
@@ -60,29 +68,41 @@ class _AdminScreenState extends State<AdminScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('DELETE_USER', style: GoogleFonts.spaceGrotesk(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.0,
-        )),
+        title: Text(
+          'DELETE_USER',
+          style: TextStyle(
+            fontFamily: 'Space Grotesk',
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.0,
+          ),
+        ),
         content: Text(
           'Delete user "$username"? Their files will remain.',
-          style: GoogleFonts.spaceMono(fontSize: 13),
+          style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-            )),
+            child: Text(
+              'CANCEL',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text('DELETE', style: GoogleFonts.spaceGrotesk(
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-              color: _kAccentRed,
-            )),
+            child: Text(
+              'DELETE',
+              style: TextStyle(
+                fontFamily: 'Space Grotesk',
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+                color: _kAccentRed,
+              ),
+            ),
           ),
         ],
       ),
@@ -95,7 +115,12 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete user: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
+        SnackBar(
+          content: Text(
+            'Failed to delete user: $e',
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          ),
+        ),
       );
     }
   }
@@ -111,12 +136,22 @@ class _AdminScreenState extends State<AdminScreen> {
       await widget.apiService.changePassword(username, password);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password changed', style: GoogleFonts.spaceMono(fontSize: 13))),
+        SnackBar(
+          content: Text(
+            'Password changed',
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to change password: $e', style: GoogleFonts.spaceMono(fontSize: 13))),
+        SnackBar(
+          content: Text(
+            'Failed to change password: $e',
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          ),
+        ),
       );
     }
   }
@@ -127,7 +162,8 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: Text(
           'USER_MANAGEMENT',
-          style: GoogleFonts.spaceGrotesk(
+          style: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
           ),
@@ -144,7 +180,10 @@ class _AdminScreenState extends State<AdminScreen> {
                 final role = user['role'] as String;
                 return Card(
                   elevation: 0,
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4),
                     side: BorderSide(
@@ -160,17 +199,21 @@ class _AdminScreenState extends State<AdminScreen> {
                     ),
                     title: Text(
                       username,
-                      style: GoogleFonts.spaceMono(
+                      style: TextStyle(
+                        fontFamily: 'Space Mono',
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     subtitle: Text(
                       'ROLE: ${role.toUpperCase()}',
-                      style: GoogleFonts.spaceMono(
+                      style: TextStyle(
+                        fontFamily: 'Space Mono',
                         fontSize: 11,
                         letterSpacing: 0.8,
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     trailing: PopupMenuButton<String>(
@@ -181,18 +224,26 @@ class _AdminScreenState extends State<AdminScreen> {
                       itemBuilder: (_) => [
                         PopupMenuItem(
                           value: 'password',
-                          child: Text('CHANGE_PASSWORD', style: GoogleFonts.spaceGrotesk(
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.8,
-                          )),
+                          child: Text(
+                            'CHANGE_PASSWORD',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
                         ),
                         PopupMenuItem(
                           value: 'delete',
-                          child: Text('DELETE', style: GoogleFonts.spaceGrotesk(
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.8,
-                            color: _kAccentRed,
-                          )),
+                          child: Text(
+                            'DELETE',
+                            style: TextStyle(
+                              fontFamily: 'Space Grotesk',
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.8,
+                              color: _kAccentRed,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -243,19 +294,27 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('CREATE_USER', style: GoogleFonts.spaceGrotesk(
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.0,
-      )),
+      title: Text(
+        'CREATE_USER',
+        style: TextStyle(
+          fontFamily: 'Space Grotesk',
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+        ),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _usernameController,
-            style: GoogleFonts.spaceMono(fontSize: 14),
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
             decoration: InputDecoration(
               labelText: 'USERNAME',
-              labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+              labelStyle: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 12,
+                letterSpacing: 1.0,
+              ),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
@@ -265,10 +324,14 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
           const SizedBox(height: 12),
           TextField(
             controller: _passwordController,
-            style: GoogleFonts.spaceMono(fontSize: 14),
+            style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
             decoration: InputDecoration(
               labelText: 'PASSWORD',
-              labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+              labelStyle: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 12,
+                letterSpacing: 1.0,
+              ),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
@@ -281,7 +344,11 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
             initialValue: _role,
             decoration: InputDecoration(
               labelText: 'ROLE',
-              labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+              labelStyle: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 12,
+                letterSpacing: 1.0,
+              ),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
@@ -290,11 +357,17 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
             items: [
               DropdownMenuItem(
                 value: 'user',
-                child: Text('USER', style: GoogleFonts.spaceMono(fontSize: 14)),
+                child: Text(
+                  'USER',
+                  style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+                ),
               ),
               DropdownMenuItem(
                 value: 'admin',
-                child: Text('ADMIN', style: GoogleFonts.spaceMono(fontSize: 14)),
+                child: Text(
+                  'ADMIN',
+                  style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+                ),
               ),
             ],
             onChanged: (v) => setState(() => _role = v ?? 'user'),
@@ -304,10 +377,14 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          )),
+          child: Text(
+            'CANCEL',
+            style: TextStyle(
+              fontFamily: 'Space Grotesk',
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
+          ),
         ),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
@@ -325,10 +402,14 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
               ),
             );
           },
-          child: Text('CREATE', style: GoogleFonts.spaceGrotesk(
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          )),
+          child: Text(
+            'CREATE',
+            style: TextStyle(
+              fontFamily: 'Space Grotesk',
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
+          ),
         ),
       ],
     );
@@ -357,17 +438,22 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
     return AlertDialog(
       title: Text(
         'CHANGE_PASSWORD: ${widget.username}',
-        style: GoogleFonts.spaceGrotesk(
+        style: TextStyle(
+          fontFamily: 'Space Grotesk',
           fontWeight: FontWeight.w700,
           letterSpacing: 1.0,
         ),
       ),
       content: TextField(
         controller: _controller,
-        style: GoogleFonts.spaceMono(fontSize: 14),
+        style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
         decoration: InputDecoration(
           labelText: 'NEW_PASSWORD',
-          labelStyle: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 1.0),
+          labelStyle: TextStyle(
+            fontFamily: 'Space Mono',
+            fontSize: 12,
+            letterSpacing: 1.0,
+          ),
           border: const OutlineInputBorder(),
           focusedBorder: const OutlineInputBorder(
             borderSide: BorderSide(color: _kAccentRed),
@@ -379,10 +465,14 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('CANCEL', style: GoogleFonts.spaceGrotesk(
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          )),
+          child: Text(
+            'CANCEL',
+            style: TextStyle(
+              fontFamily: 'Space Grotesk',
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
+          ),
         ),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
@@ -390,10 +480,14 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             if (_controller.text.isEmpty) return;
             Navigator.pop(context, _controller.text);
           },
-          child: Text('CHANGE', style: GoogleFonts.spaceGrotesk(
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          )),
+          child: Text(
+            'CHANGE',
+            style: TextStyle(
+              fontFamily: 'Space Grotesk',
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
+          ),
         ),
       ],
     );

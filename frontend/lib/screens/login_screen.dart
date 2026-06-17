@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../config.dart';
 import '../services/auth_service.dart';
@@ -55,10 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showServerConfig() {
-    showDialog(
-      context: context,
-      builder: (_) => const _ServerConfigDialog(),
-    );
+    showDialog(context: context, builder: (_) => const _ServerConfigDialog());
   }
 
   @override
@@ -107,7 +103,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 24),
                 Text(
                   'RELIQUARY',
-                  style: GoogleFonts.spaceGrotesk(
+                  style: TextStyle(
+                    fontFamily: 'Space Grotesk',
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 4,
@@ -117,7 +114,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'VAULT_ACCESS_PROTOCOL',
-                  style: GoogleFonts.spaceMono(
+                  style: TextStyle(
+                    fontFamily: 'Space Mono',
                     fontSize: 10,
                     color: Colors.grey,
                     letterSpacing: 2,
@@ -127,17 +125,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
                 TextField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'IDENTIFIER',
-                  ),
+                  decoration: const InputDecoration(labelText: 'IDENTIFIER'),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'ACCESS_KEY',
-                  ),
+                  decoration: const InputDecoration(labelText: 'ACCESS_KEY'),
                   obscureText: true,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _login(),
@@ -145,15 +139,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFEC3713).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: Text(_error!,
-                        style: GoogleFonts.spaceMono(
-                            fontSize: 11, color: const Color(0xFFEC3713))),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        fontFamily: 'Space Mono',
+                        fontSize: 11,
+                        color: const Color(0xFFEC3713),
+                      ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -165,8 +166,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text('AUTHENTICATE'),
                   ),
@@ -205,15 +208,24 @@ class _ServerConfigDialogState extends State<_ServerConfigDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('SERVER_ENDPOINT', style: GoogleFonts.spaceGrotesk(
-        fontWeight: FontWeight.w700, letterSpacing: 1.0,
-      )),
+      title: Text(
+        'SERVER_ENDPOINT',
+        style: TextStyle(
+          fontFamily: 'Space Grotesk',
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+        ),
+      ),
       content: TextField(
         controller: _controller,
-        style: GoogleFonts.spaceMono(fontSize: 13),
+        style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
         decoration: InputDecoration(
           hintText: 'http://192.168.1.100:2080',
-          hintStyle: GoogleFonts.spaceMono(fontSize: 13, color: Colors.grey[400]),
+          hintStyle: TextStyle(
+            fontFamily: 'Space Mono',
+            fontSize: 13,
+            color: Colors.grey[400],
+          ),
         ),
       ),
       actions: [

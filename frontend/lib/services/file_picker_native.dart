@@ -11,11 +11,9 @@ Future<List<UploadFile>?> pickFilesPlatform({bool allowMultiple = true}) async {
   );
   if (result == null || result.files.isEmpty) return null;
 
-  return result.files.map((f) => UploadFile(
-    name: f.name,
-    size: f.size,
-    filePath: f.path,
-  )).toList();
+  return result.files
+      .map((f) => UploadFile(name: f.name, size: f.size, filePath: f.path))
+      .toList();
 }
 
 /// Native folder picker — picks a directory and lists all files recursively.
@@ -31,12 +29,14 @@ Future<List<UploadFile>?> pickFolderPlatform() async {
     if (entity is File) {
       final stat = await entity.stat();
       final relativePath = entity.path.substring(dirPath.length + 1);
-      files.add(UploadFile(
-        name: entity.path.split(Platform.pathSeparator).last,
-        size: stat.size,
-        filePath: entity.path,
-        relativePath: '$dirName/$relativePath',
-      ));
+      files.add(
+        UploadFile(
+          name: entity.path.split(Platform.pathSeparator).last,
+          size: stat.size,
+          filePath: entity.path,
+          relativePath: '$dirName/$relativePath',
+        ),
+      );
     }
   }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../services/api_service.dart';
 
@@ -54,7 +53,8 @@ class _StatsScreenState extends State<StatsScreen> {
       appBar: AppBar(
         title: Text(
           'VAULT_STATUS',
-          style: GoogleFonts.spaceGrotesk(
+          style: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
           ),
@@ -67,14 +67,15 @@ class _StatsScreenState extends State<StatsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(_error!, style: GoogleFonts.spaceMono()),
+                  Text(_error!, style: TextStyle(fontFamily: 'Space Mono')),
                   const SizedBox(height: 16),
                   FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
                     onPressed: _loadStats,
                     child: Text(
                       'RETRY',
-                      style: GoogleFonts.spaceGrotesk(
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.0,
                       ),
@@ -176,7 +177,8 @@ class _SectionTitle extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           title,
-          style: GoogleFonts.spaceGrotesk(
+          style: TextStyle(
+            fontFamily: 'Space Grotesk',
             fontSize: 14,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
@@ -220,7 +222,8 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               value,
-              style: GoogleFonts.spaceMono(
+              style: TextStyle(
+                fontFamily: 'Space Mono',
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: Theme.of(context).colorScheme.onSurface,
@@ -229,7 +232,8 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
-              style: GoogleFonts.spaceMono(
+              style: TextStyle(
+                fontFamily: 'Space Mono',
                 fontSize: 11,
                 fontWeight: FontWeight.w400,
                 letterSpacing: 1.0,
@@ -240,7 +244,8 @@ class _StatCard extends StatelessWidget {
             ),
             Text(
               subtitle,
-              style: GoogleFonts.spaceMono(
+              style: TextStyle(
+                fontFamily: 'Space Mono',
                 fontSize: 11,
                 color: Theme.of(context).colorScheme.outline,
               ),
@@ -280,7 +285,11 @@ class _TypeRow extends StatelessWidget {
             flex: 2,
             child: Text(
               type.toUpperCase(),
-              style: GoogleFonts.spaceMono(fontSize: 12, letterSpacing: 0.5),
+              style: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 12,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
           Expanded(
@@ -299,7 +308,8 @@ class _TypeRow extends StatelessWidget {
             child: Text(
               '$count',
               textAlign: TextAlign.end,
-              style: GoogleFonts.spaceMono(
+              style: TextStyle(
+                fontFamily: 'Space Mono',
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -345,11 +355,15 @@ class _MonthRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(month, style: GoogleFonts.spaceMono(fontSize: 12)),
+            child: Text(
+              month,
+              style: TextStyle(fontFamily: 'Space Mono', fontSize: 12),
+            ),
           ),
           Text(
             '$count FILES',
-            style: GoogleFonts.spaceMono(
+            style: TextStyle(
+              fontFamily: 'Space Mono',
               fontSize: 12,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,

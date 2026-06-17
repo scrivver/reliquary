@@ -1,7 +1,6 @@
 import 'dart:io' show File;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:mime/mime.dart';
 
 import '../models/upload_file.dart';
@@ -33,9 +32,9 @@ class _UploadScreenState extends State<UploadScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick files: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to pick files: $e')));
     }
   }
 
@@ -50,9 +49,9 @@ class _UploadScreenState extends State<UploadScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick folder: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to pick folder: $e')));
     }
   }
 
@@ -64,8 +63,7 @@ class _UploadScreenState extends State<UploadScreen> {
     for (final file in _selectedFiles) {
       final key = file.displayName;
       setState(() {
-        _progress[key] =
-            _UploadProgress(status: 'INITIATING...', fraction: 0);
+        _progress[key] = _UploadProgress(status: 'INITIATING...', fraction: 0);
       });
 
       try {
@@ -107,8 +105,7 @@ class _UploadScreenState extends State<UploadScreen> {
         });
       } catch (e) {
         setState(() {
-          _progress[key] =
-              _UploadProgress(status: 'FAILED: $e', error: true);
+          _progress[key] = _UploadProgress(status: 'FAILED: $e', error: true);
         });
       }
     }
@@ -123,9 +120,14 @@ class _UploadScreenState extends State<UploadScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('DEPOSIT_ARTIFACTS',
-            style: GoogleFonts.spaceMono(
-                fontSize: 14, fontWeight: FontWeight.w700)),
+        title: Text(
+          'DEPOSIT_ARTIFACTS',
+          style: TextStyle(
+            fontFamily: 'Space Mono',
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -141,7 +143,9 @@ class _UploadScreenState extends State<UploadScreen> {
                       onPressed: _uploading ? null : _pickFiles,
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(
-                            color: Color(0xFFE0E0E0), width: 2),
+                          color: Color(0xFFE0E0E0),
+                          width: 2,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -149,12 +153,20 @@ class _UploadScreenState extends State<UploadScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.upload_file,
-                              size: 28, color: Colors.grey[400]),
+                          Icon(
+                            Icons.upload_file,
+                            size: 28,
+                            color: Colors.grey[400],
+                          ),
                           const SizedBox(height: 6),
-                          Text('SELECT_FILES',
-                              style: GoogleFonts.spaceMono(
-                                  fontSize: 10, color: Colors.grey)),
+                          Text(
+                            'SELECT_FILES',
+                            style: TextStyle(
+                              fontFamily: 'Space Mono',
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -168,7 +180,9 @@ class _UploadScreenState extends State<UploadScreen> {
                       onPressed: _uploading ? null : _pickFolder,
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(
-                            color: Color(0xFFE0E0E0), width: 2),
+                          color: Color(0xFFE0E0E0),
+                          width: 2,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -176,12 +190,20 @@ class _UploadScreenState extends State<UploadScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.folder_open,
-                              size: 28, color: Colors.grey[400]),
+                          Icon(
+                            Icons.folder_open,
+                            size: 28,
+                            color: Colors.grey[400],
+                          ),
                           const SizedBox(height: 6),
-                          Text('SELECT_FOLDER',
-                              style: GoogleFonts.spaceMono(
-                                  fontSize: 10, color: Colors.grey)),
+                          Text(
+                            'SELECT_FOLDER',
+                            style: TextStyle(
+                              fontFamily: 'Space Mono',
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -193,8 +215,11 @@ class _UploadScreenState extends State<UploadScreen> {
               const SizedBox(height: 8),
               Text(
                 '${_selectedFiles.length} file(s) selected',
-                style:
-                    GoogleFonts.spaceMono(fontSize: 11, color: Colors.grey),
+                style: TextStyle(
+                  fontFamily: 'Space Mono',
+                  fontSize: 11,
+                  color: Colors.grey,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -204,9 +229,11 @@ class _UploadScreenState extends State<UploadScreen> {
                 height: 48,
                 child: FilledButton(
                   onPressed: _uploading ? null : _uploadAll,
-                  child: Text(_uploading
-                      ? 'TRANSMITTING...'
-                      : 'INITIATE_DEPOSIT (${_selectedFiles.length})'),
+                  child: Text(
+                    _uploading
+                        ? 'TRANSMITTING...'
+                        : 'INITIATE_DEPOSIT (${_selectedFiles.length})',
+                  ),
                 ),
               ),
             const SizedBox(height: 16),
@@ -223,41 +250,52 @@ class _UploadScreenState extends State<UploadScreen> {
                       progress?.done == true
                           ? Icons.check_circle
                           : progress?.error == true
-                              ? Icons.error
-                              : file.relativePath != null
-                                  ? Icons.folder
-                                  : Icons.insert_drive_file,
+                          ? Icons.error
+                          : file.relativePath != null
+                          ? Icons.folder
+                          : Icons.insert_drive_file,
                       color: progress?.done == true
                           ? Colors.green
                           : progress?.error == true
-                              ? const Color(0xFFEC3713)
-                              : Colors.grey,
+                          ? const Color(0xFFEC3713)
+                          : Colors.grey,
                       size: 20,
                     ),
-                    title: Text(file.displayName,
-                        style: const TextStyle(fontSize: 13)),
+                    title: Text(
+                      file.displayName,
+                      style: const TextStyle(fontSize: 13),
+                    ),
                     subtitle: progress != null
                         ? Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(progress.status,
-                                  style: GoogleFonts.spaceMono(
-                                      fontSize: 10, color: Colors.grey)),
+                              Text(
+                                progress.status,
+                                style: TextStyle(
+                                  fontFamily: 'Space Mono',
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
                               if (progress.fraction != null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
                                   child: LinearProgressIndicator(
                                     value: progress.fraction,
-                                    backgroundColor:
-                                        const Color(0xFFE0E0E0),
+                                    backgroundColor: const Color(0xFFE0E0E0),
                                     color: const Color(0xFFEC3713),
                                   ),
                                 ),
                             ],
                           )
-                        : Text(_formatSize(file.size),
-                            style: GoogleFonts.spaceMono(
-                                fontSize: 10, color: Colors.grey)),
+                        : Text(
+                            _formatSize(file.size),
+                            style: TextStyle(
+                              fontFamily: 'Space Mono',
+                              fontSize: 10,
+                              color: Colors.grey,
+                            ),
+                          ),
                   );
                 },
               ),

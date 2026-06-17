@@ -1,6 +1,7 @@
 import '../models/upload_file.dart';
 
-import 'file_picker_native.dart' if (dart.library.js_interop) 'file_picker_web.dart'
+import 'file_picker_native.dart'
+    if (dart.library.js_interop) 'file_picker_web.dart'
     as platform;
 
 /// Cross-platform file picker.
