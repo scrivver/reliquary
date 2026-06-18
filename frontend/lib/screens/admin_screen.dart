@@ -377,54 +377,14 @@ class _DirectoryToolbarState extends State<_DirectoryToolbar> {
       ),
     );
 
-    final actions = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: const [
-        _ToolbarButton(icon: Icons.filter_list, label: 'Filter'),
-        _ToolbarButton(icon: Icons.download_outlined, label: 'Export CSV'),
-      ],
-    );
-
     if (widget.compact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [search, const SizedBox(height: 12), actions],
+        children: [search],
       );
     }
 
-    return Row(
-      children: [
-        Expanded(child: search),
-        const SizedBox(width: 16),
-        actions,
-      ],
-    );
-  }
-}
-
-class _ToolbarButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _ToolbarButton({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: () {},
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _kSecondary,
-        side: const BorderSide(color: _kBorder),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      icon: Icon(icon, size: 18),
-      label: Text(
-        label,
-        style: const TextStyle(fontFamily: 'Inter', fontSize: 14),
-      ),
-    );
+    return Row(children: [Expanded(child: search)]);
   }
 }
 
