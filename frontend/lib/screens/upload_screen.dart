@@ -7,6 +7,14 @@ import '../models/upload_file.dart';
 import '../services/api_service.dart';
 import '../services/file_picker_service.dart' as picker;
 
+const _kPrimary = Color(0xFFB7102A);
+const _kSurfaceLow = Color(0xFFF3F4F5);
+const _kCard = Color(0xFFFFFFFF);
+const _kBorder = Color(0xFFE5E5E5);
+const _kText = Color(0xFF191C1D);
+const _kSecondary = Color(0xFF5F5E5E);
+const _kSuccess = Color(0xFF006860);
+
 class UploadScreen extends StatefulWidget {
   final ApiService apiService;
 
@@ -118,196 +126,138 @@ class _UploadScreenState extends State<UploadScreen> {
     final allDone =
         _progress.isNotEmpty && _progress.values.every((p) => p.done);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'DEPOSIT_ARTIFACTS',
-          style: TextStyle(
-            fontFamily: 'Space Mono',
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 720, maxHeight: 760),
+      child: Material(
+        color: _kCard,
+        elevation: 0,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 100,
-                    child: OutlinedButton(
-                      onPressed: _uploading ? null : _pickFiles,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: Color(0xFFE0E0E0),
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.upload_file,
-                            size: 28,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'SELECT_FILES',
-                            style: TextStyle(
-                              fontFamily: 'Space Mono',
-                              fontSize: 10,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 24, 24, 24),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Upload Files',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 20,
+                        height: 28 / 20,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                        color: _kText,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 100,
-                    child: OutlinedButton(
-                      onPressed: _uploading ? null : _pickFolder,
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: Color(0xFFE0E0E0),
-                          width: 2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.folder_open,
-                            size: 28,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'SELECT_FOLDER',
-                            style: TextStyle(
-                              fontFamily: 'Space Mono',
-                              fontSize: 10,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: _kSecondary),
                   ),
-                ),
-              ],
-            ),
-            if (_selectedFiles.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                '${_selectedFiles.length} file(s) selected',
-                style: TextStyle(
-                  fontFamily: 'Space Mono',
-                  fontSize: 11,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: 16),
-            if (_selectedFiles.isNotEmpty)
-              SizedBox(
-                height: 48,
-                child: FilledButton(
-                  onPressed: _uploading ? null : _uploadAll,
-                  child: Text(
-                    _uploading
-                        ? 'TRANSMITTING...'
-                        : 'INITIATE_DEPOSIT (${_selectedFiles.length})',
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.separated(
-                itemCount: _selectedFiles.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final file = _selectedFiles[index];
-                  final key = file.displayName;
-                  final progress = _progress[key];
-                  return ListTile(
-                    leading: Icon(
-                      progress?.done == true
-                          ? Icons.check_circle
-                          : progress?.error == true
-                          ? Icons.error
-                          : file.relativePath != null
-                          ? Icons.folder
-                          : Icons.insert_drive_file,
-                      color: progress?.done == true
-                          ? Colors.green
-                          : progress?.error == true
-                          ? const Color(0xFFEC3713)
-                          : Colors.grey,
-                      size: 20,
-                    ),
-                    title: Text(
-                      file.displayName,
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    subtitle: progress != null
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                progress.status,
-                                style: TextStyle(
-                                  fontFamily: 'Space Mono',
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              if (progress.fraction != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: LinearProgressIndicator(
-                                    value: progress.fraction,
-                                    backgroundColor: const Color(0xFFE0E0E0),
-                                    color: const Color(0xFFEC3713),
-                                  ),
-                                ),
-                            ],
-                          )
-                        : Text(
-                            _formatSize(file.size),
-                            style: TextStyle(
-                              fontFamily: 'Space Mono',
-                              fontSize: 10,
-                              color: Colors.grey,
-                            ),
-                          ),
-                  );
-                },
+                ],
               ),
             ),
-            if (allDone)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('RETURN_TO_VAULT'),
+            const Divider(height: 1, color: _kBorder),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _UploadDropZone(
+                      uploading: _uploading,
+                      onPickFiles: _pickFiles,
+                      onPickFolder: _pickFolder,
+                    ),
+                    if (_selectedFiles.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        '${_selectedFiles.length} file(s) selected',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          height: 20 / 14,
+                          color: _kSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ..._selectedFiles.map((file) {
+                        final key = file.displayName;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _UploadProgressRow(
+                            file: file,
+                            progress: _progress[key],
+                            sizeLabel: _formatSize(file.size),
+                          ),
+                        );
+                      }),
+                    ],
+                  ],
                 ),
               ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(32, 20, 32, 20),
+              decoration: const BoxDecoration(
+                color: _kSurfaceLow,
+                border: Border(top: BorderSide(color: _kBorder)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _uploading
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                        color: _kSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _kPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: _uploading || _selectedFiles.isEmpty
+                        ? null
+                        : _uploadAll,
+                    child: Text(
+                      _uploading ? 'Uploading...' : 'Upload All',
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (allDone) ...[
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Done'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -318,6 +268,215 @@ class _UploadScreenState extends State<UploadScreen> {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+class _UploadDropZone extends StatelessWidget {
+  final bool uploading;
+  final VoidCallback onPickFiles;
+  final VoidCallback onPickFolder;
+
+  const _UploadDropZone({
+    required this.uploading,
+    required this.onPickFiles,
+    required this.onPickFolder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: uploading ? null : onPickFiles,
+      child: Container(
+        padding: const EdgeInsets.all(48),
+        decoration: BoxDecoration(
+          color: _kSurfaceLow.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _kBorder, width: 2),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: _kPrimary.withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.cloud_upload, color: _kPrimary, size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text.rich(
+              TextSpan(
+                text: 'Drag and drop files here or ',
+                children: [
+                  TextSpan(
+                    text: 'click to browse',
+                    style: TextStyle(
+                      color: _kPrimary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 16,
+                height: 24 / 16,
+                fontWeight: FontWeight.w600,
+                color: _kText,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Choose individual files or import an entire folder.',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                height: 20 / 14,
+                color: _kSecondary,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: uploading ? null : onPickFiles,
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text('Select files'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: uploading ? null : onPickFolder,
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  label: const Text('Select folder'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadProgressRow extends StatelessWidget {
+  final UploadFile file;
+  final _UploadProgress? progress;
+  final String sizeLabel;
+
+  const _UploadProgressRow({
+    required this.file,
+    required this.progress,
+    required this.sizeLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final done = progress?.done == true;
+    final error = progress?.error == true;
+    final color = error
+        ? _kPrimary
+        : done
+        ? _kSuccess
+        : _kPrimary;
+    final status = progress?.status ?? 'Ready';
+    final fraction = progress?.fraction;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: done ? _kSurfaceLow : _kCard,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Icon(
+              done
+                  ? Icons.check_circle_outline
+                  : error
+                  ? Icons.error_outline
+                  : file.relativePath != null
+                  ? Icons.folder_outlined
+                  : Icons.insert_drive_file_outlined,
+              color: color,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        file.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _kText,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      done ? 'Success' : status,
+                      style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: LinearProgressIndicator(
+                          value: fraction ?? (done ? 1 : 0),
+                          minHeight: 6,
+                          backgroundColor: _kBorder,
+                          color: color,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      sizeLabel,
+                      style: const TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 12,
+                        color: _kSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

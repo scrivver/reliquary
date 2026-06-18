@@ -578,9 +578,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _openUpload() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => UploadScreen(apiService: widget.apiService),
+    await showDialog<void>(
+      context: context,
+      barrierColor: _kText.withValues(alpha: 0.4),
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        backgroundColor: Colors.transparent,
+        child: UploadScreen(apiService: widget.apiService),
       ),
     );
     _loadFiles();
