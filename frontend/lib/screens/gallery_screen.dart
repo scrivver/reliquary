@@ -7,7 +7,16 @@ import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/download_helper.dart' as dl;
+import 'responsive_page.dart';
 import 'upload_screen.dart';
+
+const _kPrimary = Color(0xFFB7102A);
+const _kSurface = Color(0xFFF8F9FA);
+const _kCard = Color(0xFFFFFFFF);
+const _kBorder = Color(0xFFE5E5E5);
+const _kText = Color(0xFF191C1D);
+const _kSecondary = Color(0xFF5F5E5E);
+const _kSurfaceLow = Color(0xFFF3F4F5);
 
 class GalleryScreen extends StatefulWidget {
   final AuthService authService;
@@ -120,10 +129,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: Color(0xFFEC3713)),
-            ),
+            child: const Text('DELETE', style: TextStyle(color: _kPrimary)),
           ),
         ],
       ),
@@ -230,10 +236,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               Navigator.pop(ctx);
               _deleteFile(file);
             },
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: Color(0xFFEC3713)),
-            ),
+            child: const Text('DELETE', style: TextStyle(color: _kPrimary)),
           ),
           TextButton(
             onPressed: () {
@@ -318,10 +321,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'DELETE',
-              style: TextStyle(color: Color(0xFFEC3713)),
-            ),
+            child: const Text('DELETE', style: TextStyle(color: _kPrimary)),
           ),
         ],
       ),
@@ -420,6 +420,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final visibleFiles = _visibleFiles();
     final visibleFolders = _visibleFolders();
     final itemCount = visibleFolders.length + visibleFiles.length;
+    final isDesktop = isDesktopWidth(context);
+
+    if (isDesktop) {
+      return Scaffold(
+        backgroundColor: _kSurface,
+        body: _buildDesktopBody(visibleFolders, visibleFiles, itemCount),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -478,7 +486,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEC3713).withValues(alpha: 0.1),
+                      color: _kPrimary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -486,7 +494,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       style: TextStyle(
                         fontFamily: 'Space Mono',
                         fontSize: 10,
-                        color: const Color(0xFFEC3713),
+                        color: _kPrimary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -509,7 +517,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   icon: const Icon(
                     Icons.delete_outline,
                     size: 20,
-                    color: Color(0xFFEC3713),
+                    color: _kPrimary,
                   ),
                   onPressed: _selected.isEmpty ? null : _deleteSelected,
                   tooltip: 'DELETE',
@@ -561,18 +569,179 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ? null
           : FloatingActionButton(
               heroTag: 'upload_fab',
-              backgroundColor: const Color(0xFFEC3713),
+              backgroundColor: _kPrimary,
               foregroundColor: Colors.white,
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => UploadScreen(apiService: widget.apiService),
-                  ),
-                );
-                _loadFiles();
-              },
+              onPressed: _openUpload,
               child: const Icon(Icons.add),
             ),
+    );
+  }
+
+  Future<void> _openUpload() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UploadScreen(apiService: widget.apiService),
+      ),
+    );
+    _loadFiles();
+  }
+
+  Widget _buildDesktopBody(
+    List<_FolderEntry> visibleFolders,
+    List<FileItem> visibleFiles,
+    int itemCount,
+  ) {
+    return Column(
+      children: [
+        _DesktopFilesTopBar(
+          controller: _searchController,
+          searching: _searching,
+          totalCount: _totalCount,
+          username: _username,
+          onSearchChanged: (value) => setState(() {
+            _searching = value.isNotEmpty;
+            _searchQuery = value;
+          }),
+          onUpload: _openUpload,
+          onLogout: _logout,
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            color: _kPrimary,
+            onRefresh: _loadFiles,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: DesktopPageFrame(
+                maxWidth: 1440,
+                padding: const EdgeInsets.fromLTRB(40, 32, 40, 40),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: DesktopPageHeader(
+                            title: _currentPath.isEmpty
+                                ? 'Files'
+                                : _currentPath.split('/').last,
+                            subtitle: _currentPath.isEmpty
+                                ? 'Browse preserved files and folders in the primary vault.'
+                                : _currentPath,
+                          ),
+                        ),
+                        if (_currentPath.isNotEmpty) ...[
+                          const SizedBox(width: 24),
+                          OutlinedButton.icon(
+                            onPressed: _goUpFolder,
+                            icon: const Icon(Icons.arrow_back, size: 18),
+                            label: const Text('UP FOLDER'),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    _DesktopFilesControls(
+                      selectMode: _selectMode,
+                      selectedCount: _selected.length,
+                      canSelect: visibleFiles.isNotEmpty,
+                      onSelect: () => setState(() => _selectMode = true),
+                      onSelectAll: _selectAll,
+                      onDownload: _selected.isEmpty ? null : _downloadSelected,
+                      onDelete: _selected.isEmpty ? null : _deleteSelected,
+                      onClearSelection: _exitSelectMode,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDesktopList(visibleFolders, visibleFiles, itemCount),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopList(
+    List<_FolderEntry> visibleFolders,
+    List<FileItem> visibleFiles,
+    int itemCount,
+  ) {
+    if (_loading) {
+      return const SizedBox(
+        height: 360,
+        child: Center(child: CircularProgressIndicator(color: _kPrimary)),
+      );
+    }
+
+    if (_error != null) {
+      return _DesktopEmptyState(
+        icon: Icons.error_outline,
+        title: _error!,
+        subtitle: 'Refresh the vault and try again.',
+        action: FilledButton(onPressed: _loadFiles, child: const Text('RETRY')),
+      );
+    }
+
+    if (_files.isEmpty) {
+      return _DesktopEmptyState(
+        icon: Icons.folder_open,
+        title: 'Vault empty',
+        subtitle: 'Upload files to begin preserving artifacts.',
+        action: FilledButton.icon(
+          style: FilledButton.styleFrom(backgroundColor: _kPrimary),
+          onPressed: _openUpload,
+          icon: const Icon(Icons.upload),
+          label: const Text('UPLOAD'),
+        ),
+      );
+    }
+
+    if (itemCount == 0) {
+      return _DesktopEmptyState(
+        icon: Icons.search_off,
+        title: _searchQuery.trim().isEmpty ? 'Folder empty' : 'No matches',
+        subtitle: _searchQuery.trim().isEmpty
+            ? 'There are no files in this folder.'
+            : 'Try a different search term.',
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _kCard,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          const _DesktopListHeader(),
+          for (final folder in visibleFolders)
+            _DesktopFolderRow(
+              folder: folder,
+              onTap: () => _openFolder(folder.path),
+            ),
+          for (final file in visibleFiles)
+            _DesktopFileRow(
+              file: file,
+              label: _labelForFile(file),
+              size: _formatSize(file.size),
+              selected: _selectMode ? _selected.contains(file.key) : null,
+              onTap: _selectMode
+                  ? () => _toggleSelect(file)
+                  : () => _openFile(file),
+              onLongPress: _selectMode
+                  ? null
+                  : () {
+                      setState(() => _selectMode = true);
+                      _toggleSelect(file);
+                    },
+              onDownload: () => _downloadFile(file),
+              onDelete: () => _deleteFile(file),
+            ),
+        ],
+      ),
     );
   }
 
@@ -798,6 +967,606 @@ class _FolderEntry {
   String get name => path.split('/').last;
 }
 
+class _DesktopFilesTopBar extends StatelessWidget {
+  final TextEditingController controller;
+  final bool searching;
+  final int totalCount;
+  final String username;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onUpload;
+  final VoidCallback onLogout;
+
+  const _DesktopFilesTopBar({
+    required this.controller,
+    required this.searching,
+    required this.totalCount,
+    required this.username,
+    required this.onSearchChanged,
+    required this.onUpload,
+    required this.onLogout,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: _kSurface,
+        border: Border(bottom: BorderSide(color: _kBorder)),
+      ),
+      child: Row(
+        children: [
+          const Text(
+            'RELIQUARY',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              height: 16 / 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+              color: _kText,
+            ),
+          ),
+          const SizedBox(width: 32),
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: TextField(
+                controller: controller,
+                onChanged: onSearchChanged,
+                style: const TextStyle(fontFamily: 'Inter', fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search files, folders, or tags...',
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: _kSecondary,
+                    size: 20,
+                  ),
+                  filled: true,
+                  fillColor: _kSurfaceLow,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: _kBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: _kPrimary),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 24),
+          if (totalCount > 0)
+            Text(
+              '$totalCount ITEMS',
+              style: const TextStyle(
+                fontFamily: 'Geist',
+                fontSize: 12,
+                color: _kSecondary,
+              ),
+            ),
+          const SizedBox(width: 16),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: _kPrimary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: onUpload,
+            icon: const Icon(Icons.upload, size: 18),
+            label: const Text('UPLOAD'),
+          ),
+          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            tooltip: username.isEmpty ? 'Account' : username,
+            onSelected: (value) {
+              if (value == 'logout') onLogout();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'logout', child: Text('Logout')),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.account_circle_outlined, color: _kText),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DesktopFilesControls extends StatelessWidget {
+  final bool selectMode;
+  final int selectedCount;
+  final bool canSelect;
+  final VoidCallback onSelect;
+  final VoidCallback onSelectAll;
+  final VoidCallback? onDownload;
+  final VoidCallback? onDelete;
+  final VoidCallback onClearSelection;
+
+  const _DesktopFilesControls({
+    required this.selectMode,
+    required this.selectedCount,
+    required this.canSelect,
+    required this.onSelect,
+    required this.onSelectAll,
+    required this.onDownload,
+    required this.onDelete,
+    required this.onClearSelection,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (selectMode) {
+      return Row(
+        children: [
+          _PillButton(
+            label: '$selectedCount selected',
+            selected: true,
+            onPressed: onClearSelection,
+          ),
+          const SizedBox(width: 8),
+          _IconActionButton(
+            icon: Icons.select_all,
+            label: 'Select all',
+            onPressed: onSelectAll,
+          ),
+          _IconActionButton(
+            icon: Icons.download,
+            label: 'Download',
+            onPressed: onDownload,
+          ),
+          _IconActionButton(
+            icon: Icons.delete_outline,
+            label: 'Delete',
+            color: _kPrimary,
+            onPressed: onDelete,
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        _PillButton(label: 'All Files', selected: true, onPressed: () {}),
+        const SizedBox(width: 8),
+        _PillButton(label: 'Current Folder', onPressed: () {}),
+        const Spacer(),
+        _IconActionButton(
+          icon: Icons.checklist,
+          label: 'Select',
+          onPressed: canSelect ? onSelect : null,
+        ),
+        _IconActionButton(icon: Icons.sort, label: 'Sort', onPressed: () {}),
+      ],
+    );
+  }
+}
+
+class _PillButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  const _PillButton({
+    required this.label,
+    this.selected = false,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        backgroundColor: selected ? _kPrimary : Colors.transparent,
+        foregroundColor: selected ? Colors.white : _kSecondary,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.96,
+        ),
+      ),
+    );
+  }
+}
+
+class _IconActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback? onPressed;
+
+  const _IconActionButton({
+    required this.icon,
+    required this.label,
+    this.color,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20, color: onPressed == null ? null : color),
+    );
+  }
+}
+
+class _DesktopListHeader extends StatelessWidget {
+  const _DesktopListHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: const BoxDecoration(
+        color: _kSurfaceLow,
+        border: Border(bottom: BorderSide(color: _kBorder)),
+      ),
+      child: const Row(
+        children: [
+          Expanded(flex: 6, child: _HeaderCell('NAME')),
+          Expanded(flex: 2, child: _HeaderCell('SIZE')),
+          Expanded(flex: 3, child: _HeaderCell('DATE MODIFIED')),
+          SizedBox(width: 96),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderCell extends StatelessWidget {
+  final String label;
+
+  const _HeaderCell(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 12,
+        height: 16 / 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.96,
+        color: _kSecondary,
+      ),
+    );
+  }
+}
+
+class _DesktopFolderRow extends StatelessWidget {
+  final _FolderEntry folder;
+  final VoidCallback onTap;
+
+  const _DesktopFolderRow({required this.folder, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopExplorerRow(
+      onTap: onTap,
+      leading: const _ExplorerIcon(icon: Icons.folder, tint: _kPrimary),
+      title: folder.name,
+      subtitle: 'Folder',
+      size: '${folder.count} items',
+      date: '-',
+      actions: const SizedBox(width: 96),
+    );
+  }
+}
+
+class _DesktopFileRow extends StatelessWidget {
+  final FileItem file;
+  final String label;
+  final String size;
+  final bool? selected;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback onDownload;
+  final VoidCallback onDelete;
+
+  const _DesktopFileRow({
+    required this.file,
+    required this.label,
+    required this.size,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onDownload,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selected == true;
+    final inSelectMode = selected != null;
+    return _DesktopExplorerRow(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      selected: isSelected,
+      leading: Stack(
+        children: [
+          _ExplorerIcon(
+            icon: _iconForContentType(file.contentType),
+            tint: _tintForContentType(file.contentType),
+          ),
+          if (inSelectMode)
+            Positioned(
+              right: -1,
+              bottom: -1,
+              child: Icon(
+                isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 18,
+                color: isSelected ? _kPrimary : _kSecondary,
+              ),
+            ),
+        ],
+      ),
+      title: label,
+      subtitle: _displayType(file.contentType),
+      size: size,
+      date: _formatDate(file.lastModified),
+      actions: SizedBox(
+        width: 96,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            IconButton(
+              tooltip: 'Download',
+              onPressed: onDownload,
+              icon: const Icon(Icons.download_outlined, size: 18),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (action) {
+                if (action == 'details') onTap();
+                if (action == 'delete') onDelete();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'details', child: Text('Details')),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Delete', style: TextStyle(color: _kPrimary)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _iconForContentType(String contentType) {
+    if (contentType.startsWith('image/')) return Icons.image_outlined;
+    if (contentType.startsWith('video/')) return Icons.videocam_outlined;
+    if (contentType.startsWith('audio/')) return Icons.audiotrack_outlined;
+    if (contentType.contains('pdf')) return Icons.picture_as_pdf_outlined;
+    if (contentType.contains('zip') || contentType.contains('archive')) {
+      return Icons.archive_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  Color _tintForContentType(String contentType) {
+    if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
+      return const Color(0xFF006860);
+    }
+    return _kPrimary;
+  }
+
+  String _displayType(String contentType) {
+    final slash = contentType.indexOf('/');
+    if (slash == -1) return contentType;
+    return contentType.substring(0, slash).toUpperCase();
+  }
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
+}
+
+class _DesktopExplorerRow extends StatelessWidget {
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final String size;
+  final String date;
+  final Widget actions;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  const _DesktopExplorerRow({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.size,
+    required this.date,
+    required this.actions,
+    this.selected = false,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFFFDAD8).withValues(alpha: 0.32)
+              : null,
+          border: const Border(bottom: BorderSide(color: _kBorder)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 6,
+              child: Row(
+                children: [
+                  leading,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 16,
+                            height: 24 / 16,
+                            color: _kText,
+                          ),
+                        ),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Geist',
+                            fontSize: 12,
+                            color: _kSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(flex: 2, child: _MetaText(size)),
+            Expanded(flex: 3, child: _MetaText(date)),
+            actions,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExplorerIcon extends StatelessWidget {
+  final IconData icon;
+  final Color tint;
+
+  const _ExplorerIcon({required this.icon, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: tint, size: 22),
+    );
+  }
+}
+
+class _MetaText extends StatelessWidget {
+  final String value;
+
+  const _MetaText(this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 14,
+        height: 20 / 14,
+        color: _kSecondary,
+      ),
+    );
+  }
+}
+
+class _DesktopEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  const _DesktopEmptyState({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 72),
+      decoration: BoxDecoration(
+        color: _kCard,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 56, color: _kSecondary.withValues(alpha: 0.4)),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 20,
+              height: 28 / 20,
+              fontWeight: FontWeight.w600,
+              color: _kText,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 14,
+              height: 20 / 14,
+              color: _kSecondary,
+            ),
+          ),
+          if (action != null) ...[const SizedBox(height: 24), action!],
+        ],
+      ),
+    );
+  }
+}
+
 class _FolderTile extends StatelessWidget {
   final _FolderEntry folder;
   final VoidCallback onTap;
@@ -923,9 +1692,7 @@ class _FileTileState extends State<_FileTile> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F5F5),
                 border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFFEC3713)
-                      : const Color(0xFFE0E0E0),
+                  color: isSelected ? _kPrimary : const Color(0xFFE0E0E0),
                   width: isSelected ? 2 : 1,
                 ),
                 borderRadius: BorderRadius.circular(8),
@@ -948,11 +1715,11 @@ class _FileTileState extends State<_FileTile> {
                   height: 24,
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? const Color(0xFFEC3713)
+                        ? _kPrimary
                         : Colors.white.withValues(alpha: 0.8),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: isSelected ? const Color(0xFFEC3713) : Colors.grey,
+                      color: isSelected ? _kPrimary : Colors.grey,
                     ),
                   ),
                   child: isSelected
