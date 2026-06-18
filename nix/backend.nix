@@ -10,6 +10,7 @@ pkgs.buildGoModule {
   subPackages = [
     "."
     "cmd/reliquary-thumbnail-worker"
+    "cmd/reliquary-requeue-thumbnails"
     "cmd/restore-archive"
   ];
 

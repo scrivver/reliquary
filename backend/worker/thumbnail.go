@@ -251,6 +251,8 @@ func (p *ThumbnailProcessor) generatePDFThumbnail(
 
 	cmd := exec.CommandContext(ctx, "pdftoppm",
 		"-jpeg",
+		"-jpegopt", fmt.Sprintf("quality=%d", thumbQuality),
+		"-singlefile",
 		"-f", "1",
 		"-l", "1",
 		"-scale-to", fmt.Sprintf("%d", thumbWidth),
@@ -261,7 +263,7 @@ func (p *ThumbnailProcessor) generatePDFThumbnail(
 		return nil, fmt.Errorf("pdftoppm render: %w\noutput: %s", err, output)
 	}
 
-	outFile := tmpOutBase + "-1.jpg"
+	outFile := tmpOutBase + ".jpg"
 	defer os.Remove(outFile)
 
 	pageData, err := os.ReadFile(outFile)

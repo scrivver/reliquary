@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"os/exec"
 	"testing"
 
 	"github.com/minio/minio-go/v7"
@@ -157,6 +158,52 @@ func TestThumbnailProcessorDeletesOutputWhenSourceChanges(t *testing.T) {
 	}
 }
 
+func TestThumbnailProcessorGeneratesPDFThumbnail(t *testing.T) {
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		t.Skip("pdftoppm not available")
+	}
+
+	const checksum = "pdf-checksum"
+	store := &memoryThumbnailStore{
+		objects: map[string]memoryThumbnailObject{
+			"files/alice/doc.pdf": {
+				data: minimalPDF(),
+				info: minio.ObjectInfo{
+					Key:          "files/alice/doc.pdf",
+					Size:         int64(len(minimalPDF())),
+					ContentType:  "application/pdf",
+					UserMetadata: map[string]string{"Checksum": checksum},
+				},
+			},
+		},
+	}
+	processor := &ThumbnailProcessor{store: store}
+
+	err := processor.Process(context.Background(), thumbnail.Job{
+		Version:     thumbnail.JobVersion,
+		FileKey:     "files/alice/doc.pdf",
+		ContentType: "application/pdf",
+		Checksum:    checksum,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	thumb, ok := store.objects["thumbs/alice/doc.pdf"]
+	if !ok {
+		t.Fatal("pdf thumbnail was not stored")
+	}
+	if thumb.info.ContentType != "image/jpeg" {
+		t.Fatalf("content type=%q, want image/jpeg", thumb.info.ContentType)
+	}
+	if len(thumb.data) < 2 || thumb.data[0] != 0xff || thumb.data[1] != 0xd8 {
+		t.Fatalf("thumbnail is not a jpeg: first bytes % x", thumb.data[:min(len(thumb.data), 8)])
+	}
+	if metadataValue(thumb.info.UserMetadata, "Source-Checksum") != checksum {
+		t.Fatalf("unexpected metadata: %+v", thumb.info.UserMetadata)
+	}
+}
+
 func newImageThumbnailStore(t *testing.T) *memoryThumbnailStore {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
@@ -182,4 +229,38 @@ func newImageThumbnailStore(t *testing.T) *memoryThumbnailStore {
 			},
 		},
 	}
+}
+
+func minimalPDF() []byte {
+	return []byte(`%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 44 >>
+stream
+0.9 0.2 0.1 rg
+20 20 160 160 re
+f
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000010 00000 n 
+0000000061 00000 n 
+0000000118 00000 n 
+0000000207 00000 n 
+trailer
+<< /Root 1 0 R /Size 5 >>
+startxref
+301
+%%EOF
+`)
 }
