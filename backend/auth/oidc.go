@@ -69,19 +69,7 @@ func NewOIDCAuthenticator(ctx context.Context, cfg *config.Config) (*OIDCAuthent
 // Middleware validates the Bearer token and injects username/role into context.
 func (o *OIDCAuthenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "missing authorization header", http.StatusUnauthorized)
-			return
-		}
-
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenStr == authHeader {
-			http.Error(w, "invalid authorization format", http.StatusUnauthorized)
-			return
-		}
-
-		username, err := o.resolveUsername(r.Context(), tokenStr)
+		username, err := o.AuthenticateRequest(r)
 		if err != nil {
 			slog.Warn("oidc token validation failed", "error", err)
 			http.Error(w, "invalid token", http.StatusUnauthorized)
@@ -92,6 +80,25 @@ func (o *OIDCAuthenticator) Middleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ctxRole, RoleUser)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (o *OIDCAuthenticator) AuthenticateRequest(r *http.Request) (string, error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", fmt.Errorf("missing authorization header")
+	}
+
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenStr == authHeader {
+		return "", fmt.Errorf("invalid authorization format")
+	}
+
+	username, err := o.resolveUsername(r.Context(), tokenStr)
+	if err != nil {
+		return "", err
+	}
+
+	return username, nil
 }
 
 // resolveUsername returns the username for a token, using the cache if available.

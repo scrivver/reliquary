@@ -7,7 +7,6 @@ import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/download_helper.dart' as dl;
-import 'login_screen.dart';
 import 'upload_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -52,10 +51,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
   void _handleUnauthorized() {
     final nav = navigatorKey.currentState;
     if (nav != null) {
+      widget.authService.logout();
       nav.pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => LoginScreen(authService: widget.authService),
-        ),
+        MaterialPageRoute(builder: (_) => const AuthGate()),
         (_) => false,
       );
     }

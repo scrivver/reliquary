@@ -133,9 +133,16 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Listen address (path = unix socket) |
-| `AUTH_MODE` | `full` | Auth mode: `full`, `proxy`, or `none` (see below) |
+| `AUTH_MODE` | `full` | Compatibility auth mode: `full`, `oidc`, `proxy`, or `none` |
+| `AUTH_PASSWORD_ENABLED` | derived from `AUTH_MODE` | Enable username/password login; set with `AUTH_OIDC_ENABLED=true` to offer both |
+| `AUTH_OIDC_ENABLED` | derived from `AUTH_MODE` | Enable OIDC bearer-token auth and frontend OIDC login |
+| `AUTH_PROXY_ENABLED` | derived from `AUTH_MODE` | Enable legacy trusted-header proxy auth |
+| `AUTH_NONE_ENABLED` | derived from `AUTH_MODE` | Enable no-auth single-user mode |
 | `AUTH_USERNAME` | `admin` | Initial admin / default user |
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
+| `OIDC_ISSUER_URL` | — | OIDC issuer URL when OIDC auth is enabled |
+| `OIDC_CLIENT_ID` | — | Public OIDC client ID used by the frontend |
+| `OIDC_USERNAME_CLAIM` | `preferred_username` | Userinfo claim used as the Reliquary username |
 | `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Broker used for Engram file events |
 | `EVENT_QUEUE` | `engram.ingest` | Predeclared RabbitMQ queue/routing key |
 | `EVENT_DEVICE_NAME` | `reliquary` | Producer name in canonical file events |
@@ -155,10 +162,18 @@ Delivery is at least once. If RabbitMQ does not confirm an event, the API return
 | Mode | Use case | Auth | User identity |
 |------|----------|------|--------------|
 | `full` | Standalone deployment | JWT login | From JWT token |
-| `proxy` | Behind auth proxy (nginx, OAuth2 proxy, Tailscale) | None | From `X-Reliquary-User` header |
+| `oidc` | Mind Palace / external identity provider | OIDC access token | From configured OIDC userinfo claim |
+| `proxy` | Legacy/advanced trusted proxy deployment | None in Reliquary | From `X-Reliquary-User` header |
 | `none` | Single-user, CLI scripts, embedded | None | Fixed default user |
 
-**Proxy mode** example with nginx:
+The frontend discovers enabled login methods from `GET /api/auth/config`.
+`AUTH_MODE` keeps existing deployments working, while the provider flags allow
+combined modes. For example, set `AUTH_PASSWORD_ENABLED=true` and
+`AUTH_OIDC_ENABLED=true` to show both username/password and OIDC login.
+
+**Proxy mode** is legacy/advanced. Reliquary must only be reachable through the
+trusted proxy, and the proxy must strip inbound `X-Reliquary-User` before
+setting its own value. Example with nginx:
 ```nginx
 location / {
     proxy_set_header X-Reliquary-User $remote_user;
@@ -269,9 +284,16 @@ Container configuration is provided through `.env` and consumed by
 | `MINIO_ROOT_PASSWORD` | `change-me-in-production` | MinIO root password |
 | `MINIO_BUCKET` | `reliquary` | MinIO bucket name |
 | `AUTH_MODE` | `full` | Authentication mode: `full`, `proxy`, `none`, or `oidc` |
+| `AUTH_PASSWORD_ENABLED` | derived from `AUTH_MODE` | Enables password login; can be combined with OIDC |
+| `AUTH_OIDC_ENABLED` | derived from `AUTH_MODE` | Enables OIDC bearer-token auth and OIDC login UI |
+| `AUTH_PROXY_ENABLED` | derived from `AUTH_MODE` | Enables legacy trusted-header proxy auth |
+| `AUTH_NONE_ENABLED` | derived from `AUTH_MODE` | Enables no-auth single-user mode |
 | `AUTH_USERNAME` | `admin` | Initial admin username seeded on first startup |
 | `AUTH_PASSWORD` | `change-me-in-production` | Initial admin password seeded on first startup |
 | `JWT_SECRET` | `change-me-in-production` | JWT signing secret; must be unique in production |
+| `OIDC_ISSUER_URL` | — | OIDC issuer URL |
+| `OIDC_CLIENT_ID` | — | Public OIDC client ID |
+| `OIDC_USERNAME_CLAIM` | `preferred_username` | Userinfo claim used as Reliquary username |
 | `EVENTS_ENABLED` | `true` | Publish explicit file events for downstream consumers |
 | `EVENT_QUEUE` | `engram.ingest` | RabbitMQ queue/routing key for file events |
 | `EVENT_DEVICE_NAME` | `reliquary` | Device name written into emitted file events |

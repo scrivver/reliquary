@@ -22,10 +22,14 @@ type Config struct {
 	MinIOUseSSL    bool
 
 	// Auth
-	AuthMode  string // "full" (JWT), "proxy" (trust header), "none" (single user), "oidc" (OIDC token validation)
-	JWTSecret string
-	Username  string
-	Password  string
+	AuthMode            string // "full" (JWT), "proxy" (trust header), "none" (single user), "oidc" (OIDC token validation)
+	PasswordAuthEnabled bool
+	OIDCAuthEnabled     bool
+	ProxyAuthEnabled    bool
+	NoAuthEnabled       bool
+	JWTSecret           string
+	Username            string
+	Password            string
 
 	// OIDC (AUTH_MODE=oidc)
 	OIDCIssuerURL     string // e.g. "http://localhost:9000/application/o/mind-palace/"
@@ -83,6 +87,11 @@ func Load() (*Config, error) {
 		ThumbnailMaxAttempts: envOrInt("THUMBNAIL_MAX_ATTEMPTS", 5),
 	}
 
+	cfg.PasswordAuthEnabled = defaultAuthProviderEnabled("AUTH_PASSWORD_ENABLED", cfg.AuthMode == "full")
+	cfg.OIDCAuthEnabled = defaultAuthProviderEnabled("AUTH_OIDC_ENABLED", cfg.AuthMode == "oidc")
+	cfg.ProxyAuthEnabled = defaultAuthProviderEnabled("AUTH_PROXY_ENABLED", cfg.AuthMode == "proxy")
+	cfg.NoAuthEnabled = defaultAuthProviderEnabled("AUTH_NONE_ENABLED", cfg.AuthMode == "none")
+
 	return cfg, nil
 }
 
@@ -109,4 +118,8 @@ func envOrBool(key string, fallback bool) bool {
 		}
 	}
 	return fallback
+}
+
+func defaultAuthProviderEnabled(key string, fallback bool) bool {
+	return envOrBool(key, fallback)
 }

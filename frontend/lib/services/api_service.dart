@@ -8,12 +8,14 @@ class ApiService {
   final AuthService _authService;
   final void Function()? onUnauthorized;
   late final Dio _dio;
+  late final String _origin;
 
   // Cache presigned URLs for 10 minutes (they're valid for 15).
   final Map<String, _CachedUrl> _urlCache = {};
   static const _cacheTtl = Duration(minutes: 10);
 
   ApiService(this._authService, {this.onUnauthorized}) {
+    _origin = Uri.parse(AppConfig.apiBaseUrl).origin;
     _dio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl));
     _dio.interceptors.add(
       InterceptorsWrapper(
@@ -101,7 +103,7 @@ class ApiService {
       queryParameters: {'key': key},
     );
     final relativePath = response.data['url'] as String;
-    final url = AppConfig.apiBaseUrl + relativePath;
+    final url = _origin + relativePath;
 
     _urlCache[key] = _CachedUrl(
       url: url,
@@ -118,7 +120,7 @@ class ApiService {
       queryParameters: {'key': key, 'download': 'true'},
     );
     final relativePath = response.data['url'] as String;
-    return AppConfig.apiBaseUrl + relativePath;
+    return _origin + relativePath;
   }
 
   /// Delete an active file.

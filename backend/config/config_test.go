@@ -37,3 +37,45 @@ func TestEventsCanBeExplicitlyDisabled(t *testing.T) {
 		t.Fatal("events should be disabled")
 	}
 }
+
+func TestAuthModeDefaultsToPasswordProvider(t *testing.T) {
+	t.Setenv("MINIO_PORT", "9000")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.PasswordAuthEnabled || cfg.OIDCAuthEnabled || cfg.ProxyAuthEnabled || cfg.NoAuthEnabled {
+		t.Fatalf("unexpected auth providers: %+v", cfg)
+	}
+}
+
+func TestAuthModeOIDCEnablesOIDCProvider(t *testing.T) {
+	t.Setenv("MINIO_PORT", "9000")
+	t.Setenv("AUTH_MODE", "oidc")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.PasswordAuthEnabled || !cfg.OIDCAuthEnabled || cfg.ProxyAuthEnabled || cfg.NoAuthEnabled {
+		t.Fatalf("unexpected auth providers: %+v", cfg)
+	}
+}
+
+func TestAuthProviderFlagsCanCombinePasswordAndOIDC(t *testing.T) {
+	t.Setenv("MINIO_PORT", "9000")
+	t.Setenv("AUTH_MODE", "full")
+	t.Setenv("AUTH_OIDC_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.PasswordAuthEnabled || !cfg.OIDCAuthEnabled || cfg.ProxyAuthEnabled || cfg.NoAuthEnabled {
+		t.Fatalf("unexpected auth providers: %+v", cfg)
+	}
+}

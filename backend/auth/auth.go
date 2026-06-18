@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -16,7 +17,7 @@ type contextKey string
 
 const (
 	ctxUsername contextKey = "username"
-	ctxRole    contextKey = "role"
+	ctxRole     contextKey = "role"
 )
 
 type Service struct {
@@ -98,31 +99,38 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 // Middleware validates the JWT and injects username/role into the request context.
 func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "missing authorization header", http.StatusUnauthorized)
+		username, role, err := s.AuthenticateRequest(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenStr == authHeader {
-			http.Error(w, "invalid authorization format", http.StatusUnauthorized)
-			return
-		}
-
-		claims := &Claims{}
-		token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
-			return s.secret, nil
-		})
-		if err != nil || !token.Valid {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), ctxUsername, claims.Username)
-		ctx = context.WithValue(ctx, ctxRole, claims.Role)
+		ctx := context.WithValue(r.Context(), ctxUsername, username)
+		ctx = context.WithValue(ctx, ctxRole, role)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Service) AuthenticateRequest(r *http.Request) (string, Role, error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", "", fmt.Errorf("missing authorization header")
+	}
+
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+	if tokenStr == authHeader {
+		return "", "", fmt.Errorf("invalid authorization format")
+	}
+
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
+		return s.secret, nil
+	})
+	if err != nil || !token.Valid {
+		return "", "", fmt.Errorf("invalid token")
+	}
+
+	return claims.Username, claims.Role, nil
 }
 
 // AdminMiddleware rejects non-admin users.
@@ -147,4 +155,9 @@ func UsernameFromContext(ctx context.Context) string {
 func RoleFromContext(ctx context.Context) Role {
 	v, _ := ctx.Value(ctxRole).(Role)
 	return v
+}
+
+func WithIdentity(ctx context.Context, username string, role Role) context.Context {
+	ctx = context.WithValue(ctx, ctxUsername, username)
+	return context.WithValue(ctx, ctxRole, role)
 }

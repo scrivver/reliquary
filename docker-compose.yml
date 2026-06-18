@@ -66,7 +66,14 @@ services:
       AUTH_MODE: ${AUTH_MODE:-full}
       AUTH_USERNAME: ${AUTH_USERNAME:-admin}
       AUTH_PASSWORD: ${AUTH_PASSWORD:-change-me-in-production}
+      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-}
+      AUTH_OIDC_ENABLED: ${AUTH_OIDC_ENABLED:-}
+      AUTH_PROXY_ENABLED: ${AUTH_PROXY_ENABLED:-}
+      AUTH_NONE_ENABLED: ${AUTH_NONE_ENABLED:-}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
     healthcheck:
       test: ["CMD", "reliquary-api-healthcheck"]
       interval: 5s

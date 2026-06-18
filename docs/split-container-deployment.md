@@ -85,9 +85,16 @@ deployment.
 | `MINIO_ROOT_PASSWORD` | `minio`, `minio-init`, `api`, `thumbnail-worker` | `change-me-in-production` | MinIO root/secret key. |
 | `MINIO_BUCKET` | `minio-init`, `api`, `thumbnail-worker` | `reliquary` | Bucket created on startup and used by Reliquary. |
 | `AUTH_MODE` | `api` | `full` | Authentication mode: `full`, `proxy`, `none`, or `oidc`. |
+| `AUTH_PASSWORD_ENABLED` | `api` | derived from `AUTH_MODE` | Enables password login; can be combined with OIDC. |
+| `AUTH_OIDC_ENABLED` | `api` | derived from `AUTH_MODE` | Enables OIDC bearer-token auth and OIDC login UI. |
+| `AUTH_PROXY_ENABLED` | `api` | derived from `AUTH_MODE` | Enables legacy trusted-header proxy auth. |
+| `AUTH_NONE_ENABLED` | `api` | derived from `AUTH_MODE` | Enables no-auth single-user mode. |
 | `AUTH_USERNAME` | `api` | `admin` | Initial admin user created on first startup. |
 | `AUTH_PASSWORD` | `api` | `change-me-in-production` | Initial admin password created on first startup. |
 | `JWT_SECRET` | `api` | `change-me-in-production` | JWT signing secret; use a unique random value. |
+| `OIDC_ISSUER_URL` | `api` | — | OIDC issuer URL. |
+| `OIDC_CLIENT_ID` | `api` | — | Public OIDC client ID. |
+| `OIDC_USERNAME_CLAIM` | `api` | `preferred_username` | Userinfo claim used as Reliquary username. |
 | `EVENTS_ENABLED` | `api` | `true` | Enables explicit file-event publishing to RabbitMQ. |
 | `EVENT_QUEUE` | `api` | `engram.ingest` | RabbitMQ queue/routing key for file create/delete events. |
 | `EVENT_DEVICE_NAME` | `api` | `reliquary` | Device name included in emitted file events. |

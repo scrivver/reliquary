@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config.dart';
+import '../platform_info.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
@@ -21,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   String? _username;
+  String? _provider;
 
   @override
   void initState() {
@@ -31,7 +33,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadUsername() async {
     final username = await widget.authService?.getUsername();
-    if (mounted) setState(() => _username = username);
+    final provider = await widget.authService?.getProvider();
+    if (mounted) {
+      setState(() {
+        _username = username;
+        _provider = provider;
+      });
+    }
   }
 
   @override
@@ -120,80 +128,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Server URL section
-          _buildSectionHeader('SERVER_URL'),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _urlController,
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
-            decoration: InputDecoration(
-              border: const OutlineInputBorder(),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kAccentRed),
+          if (!isWebBuild) ...[
+            _buildSectionHeader('SERVER_URL'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _urlController,
+              style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                focusedBorder: const OutlineInputBorder(
+                  borderSide: BorderSide(color: _kAccentRed),
+                ),
+                hintText: 'http://192.168.1.100:2080',
+                hintStyle: TextStyle(
+                  fontFamily: 'Space Mono',
+                  fontSize: 14,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
               ),
-              hintText: 'http://192.168.1.100:2080',
-              hintStyle: TextStyle(
-                fontFamily: 'Space Mono',
-                fontSize: 14,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.3),
-              ),
+              keyboardType: TextInputType.url,
+              onSubmitted: (_) => _save(),
             ),
-            keyboardType: TextInputType.url,
-            onSubmitted: (_) => _save(),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
-                  onPressed: _save,
-                  child: Text(
-                    'SAVE',
-                    style: TextStyle(
-                      fontFamily: 'Space Grotesk',
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.0,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
+                    onPressed: _save,
+                    child: Text(
+                      'SAVE',
+                      style: TextStyle(
+                        fontFamily: 'Space Grotesk',
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _kAccentRed),
-                  foregroundColor: _kAccentRed,
-                ),
-                onPressed: _reset,
-                child: Text(
-                  'RESET_DEFAULT',
-                  style: TextStyle(
-                    fontFamily: 'Space Grotesk',
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: _kAccentRed),
+                    foregroundColor: _kAccentRed,
+                  ),
+                  onPressed: _reset,
+                  child: Text(
+                    'RESET_DEFAULT',
+                    style: TextStyle(
+                      fontFamily: 'Space Grotesk',
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Change the server URL to connect to a different Reliquary instance '
-            '(e.g., a portable drive on your local network).',
-            style: TextStyle(
-              fontFamily: 'Space Mono',
-              fontSize: 11,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.5),
+              ],
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              'Change the server URL to connect to a different Reliquary instance '
+              '(e.g., a portable drive on your local network).',
+              style: TextStyle(
+                fontFamily: 'Space Mono',
+                fontSize: 11,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ],
 
           // Change password section
-          if (_username != null && widget.apiService != null) ...[
-            const SizedBox(height: 32),
+          if (_username != null &&
+              _provider == 'password' &&
+              widget.apiService != null) ...[
+            if (!isWebBuild) const SizedBox(height: 32),
             Divider(color: Theme.of(context).colorScheme.outlineVariant),
             const SizedBox(height: 16),
             _buildSectionHeader('CHANGE_PASSWORD'),

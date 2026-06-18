@@ -8,6 +8,7 @@ class AppConfig {
   static const String _prefsKey = 'api_base_url';
 
   static String apiBaseUrl = defaultApiBaseUrl;
+  static bool hasSavedApiBaseUrl = false;
 
   static String get defaultApiBaseUrl {
     if (_configuredDefaultApiBaseUrl.isNotEmpty) {
@@ -26,20 +27,32 @@ class AppConfig {
   /// Load the saved API base URL from shared preferences.
   static Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    apiBaseUrl = prefs.getString(_prefsKey) ?? defaultApiBaseUrl;
+    final saved = prefs.getString(_prefsKey);
+    hasSavedApiBaseUrl = saved != null && saved.isNotEmpty;
+    apiBaseUrl = saved ?? defaultApiBaseUrl;
   }
 
   /// Save a new API base URL.
   static Future<void> setApiBaseUrl(String url) async {
-    apiBaseUrl = url;
+    apiBaseUrl = normalizeBaseUrl(url);
+    hasSavedApiBaseUrl = true;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, url);
+    await prefs.setString(_prefsKey, apiBaseUrl);
   }
 
   /// Reset to default.
   static Future<void> resetApiBaseUrl() async {
     apiBaseUrl = defaultApiBaseUrl;
+    hasSavedApiBaseUrl = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
+  }
+
+  static String normalizeBaseUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.endsWith('/')) {
+      return trimmed.substring(0, trimmed.length - 1);
+    }
+    return trimmed;
   }
 }
