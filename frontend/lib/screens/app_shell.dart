@@ -20,6 +20,7 @@ class _AppShellState extends State<AppShell> {
   late final ApiService _apiService;
   int _selectedIndex = 0;
   bool _isAdmin = false;
+  String _username = '';
 
   @override
   void initState() {
@@ -37,7 +38,13 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _loadRole() async {
     final isAdmin = await widget.authService.isAdmin();
-    if (mounted) setState(() => _isAdmin = isAdmin);
+    final username = await widget.authService.getUsername();
+    if (mounted) {
+      setState(() {
+        _isAdmin = isAdmin;
+        _username = username ?? '';
+      });
+    }
   }
 
   List<_NavItem> get _navItems => [
@@ -119,6 +126,7 @@ class _AppShellState extends State<AppShell> {
                         const SizedBox(height: 8),
                       ],
                       const Spacer(),
+                      _SidebarUserButton(username: _username),
                     ],
                   ),
                 ),
@@ -239,6 +247,64 @@ class _DesktopNavItem extends StatelessWidget {
       default:
         return label;
     }
+  }
+}
+
+class _SidebarUserButton extends StatelessWidget {
+  final String username;
+
+  const _SidebarUserButton({required this.username});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = username.isEmpty ? '?' : username[0].toUpperCase();
+    return Tooltip(
+      message: username.isEmpty ? 'Account' : username,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white12),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                username.isEmpty ? 'Account' : username,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontFamily: 'Inter',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

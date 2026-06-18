@@ -426,6 +426,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return Scaffold(
         backgroundColor: _kSurface,
         body: _buildDesktopBody(visibleFolders, visibleFiles, itemCount),
+        floatingActionButton: _selectMode
+            ? null
+            : FloatingActionButton.extended(
+                heroTag: 'desktop_upload_fab',
+                backgroundColor: _kPrimary,
+                foregroundColor: Colors.white,
+                onPressed: _openUpload,
+                icon: const Icon(Icons.upload),
+                label: const Text('UPLOAD'),
+              ),
       );
     }
 
@@ -595,75 +605,66 @@ class _GalleryScreenState extends State<GalleryScreen> {
     List<FileItem> visibleFiles,
     int itemCount,
   ) {
-    return Column(
-      children: [
-        _DesktopFilesTopBar(
-          controller: _searchController,
-          searching: _searching,
-          totalCount: _totalCount,
-          username: _username,
-          onSearchChanged: (value) => setState(() {
-            _searching = value.isNotEmpty;
-            _searchQuery = value;
-          }),
-          onUpload: _openUpload,
-          onLogout: _logout,
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            color: _kPrimary,
-            onRefresh: _loadFiles,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: DesktopPageFrame(
-                maxWidth: 1440,
-                padding: const EdgeInsets.fromLTRB(40, 32, 40, 40),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: DesktopPageHeader(
-                            title: _currentPath.isEmpty
-                                ? 'Files'
-                                : _currentPath.split('/').last,
-                            subtitle: _currentPath.isEmpty
-                                ? 'Browse preserved files and folders in the primary vault.'
-                                : _currentPath,
-                          ),
-                        ),
-                        if (_currentPath.isNotEmpty) ...[
-                          const SizedBox(width: 24),
-                          OutlinedButton.icon(
-                            onPressed: _goUpFolder,
-                            icon: const Icon(Icons.arrow_back, size: 18),
-                            label: const Text('UP FOLDER'),
-                          ),
-                        ],
-                      ],
+    return RefreshIndicator(
+      color: _kPrimary,
+      onRefresh: _loadFiles,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: DesktopPageFrame(
+          maxWidth: 1440,
+          padding: const EdgeInsets.fromLTRB(40, 40, 40, 96),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: DesktopPageHeader(
+                      title: _currentPath.isEmpty
+                          ? 'Files'
+                          : _currentPath.split('/').last,
+                      subtitle: _currentPath.isEmpty
+                          ? 'Browse preserved files and folders in the primary vault.'
+                          : _currentPath,
                     ),
-                    const SizedBox(height: 32),
-                    _DesktopFilesControls(
-                      selectMode: _selectMode,
-                      selectedCount: _selected.length,
-                      canSelect: visibleFiles.isNotEmpty,
-                      onSelect: () => setState(() => _selectMode = true),
-                      onSelectAll: _selectAll,
-                      onDownload: _selected.isEmpty ? null : _downloadSelected,
-                      onDelete: _selected.isEmpty ? null : _deleteSelected,
-                      onClearSelection: _exitSelectMode,
+                  ),
+                  if (_currentPath.isNotEmpty) ...[
+                    const SizedBox(width: 24),
+                    OutlinedButton.icon(
+                      onPressed: _goUpFolder,
+                      icon: const Icon(Icons.arrow_back, size: 18),
+                      label: const Text('UP FOLDER'),
                     ),
-                    const SizedBox(height: 16),
-                    _buildDesktopList(visibleFolders, visibleFiles, itemCount),
                   ],
-                ),
+                ],
               ),
-            ),
+              const SizedBox(height: 24),
+              _DesktopFilesSearchAndFilters(
+                controller: _searchController,
+                totalCount: _totalCount,
+                onSearchChanged: (value) => setState(() {
+                  _searching = value.isNotEmpty;
+                  _searchQuery = value;
+                }),
+              ),
+              const SizedBox(height: 24),
+              _DesktopFilesControls(
+                selectMode: _selectMode,
+                selectedCount: _selected.length,
+                canSelect: visibleFiles.isNotEmpty,
+                onSelect: () => setState(() => _selectMode = true),
+                onSelectAll: _selectAll,
+                onDownload: _selected.isEmpty ? null : _downloadSelected,
+                onDelete: _selected.isEmpty ? null : _deleteSelected,
+                onClearSelection: _exitSelectMode,
+              ),
+              const SizedBox(height: 16),
+              _buildDesktopList(visibleFolders, visibleFiles, itemCount),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -971,120 +972,80 @@ class _FolderEntry {
   String get name => path.split('/').last;
 }
 
-class _DesktopFilesTopBar extends StatelessWidget {
+class _DesktopFilesSearchAndFilters extends StatelessWidget {
   final TextEditingController controller;
-  final bool searching;
   final int totalCount;
-  final String username;
   final ValueChanged<String> onSearchChanged;
-  final VoidCallback onUpload;
-  final VoidCallback onLogout;
 
-  const _DesktopFilesTopBar({
+  const _DesktopFilesSearchAndFilters({
     required this.controller,
-    required this.searching,
     required this.totalCount,
-    required this.username,
     required this.onSearchChanged,
-    required this.onUpload,
-    required this.onLogout,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: const BoxDecoration(
-        color: _kSurface,
-        border: Border(bottom: BorderSide(color: _kBorder)),
-      ),
-      child: Row(
-        children: [
-          const Text(
-            'RELIQUARY',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 12,
-              height: 16 / 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.2,
-              color: _kText,
-            ),
-          ),
-          const SizedBox(width: 32),
-          Expanded(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: TextField(
-                controller: controller,
-                onChanged: onSearchChanged,
-                style: const TextStyle(fontFamily: 'Inter', fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Search files, folders, or tags...',
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    color: _kSecondary,
-                    size: 20,
-                  ),
-                  filled: true,
-                  fillColor: _kSurfaceLow,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _kBorder),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: _kPrimary),
-                  ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: TextField(
+              controller: controller,
+              onChanged: onSearchChanged,
+              style: const TextStyle(fontFamily: 'Inter', fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search files, folders, or tags...',
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: _kSecondary,
+                  size: 20,
+                ),
+                filled: true,
+                fillColor: _kSurfaceLow,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _kBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: _kPrimary),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 24),
-          if (totalCount > 0)
-            Text(
-              '$totalCount ITEMS',
-              style: const TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 12,
-                color: _kSecondary,
-              ),
-            ),
-          const SizedBox(width: 16),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: _kPrimary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: onUpload,
-            icon: const Icon(Icons.upload, size: 18),
-            label: const Text('UPLOAD'),
+        ),
+        const SizedBox(width: 16),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: _kSurfaceLow,
+            border: Border.all(color: _kBorder),
+            borderRadius: BorderRadius.circular(999),
           ),
-          const SizedBox(width: 8),
-          PopupMenuButton<String>(
-            tooltip: username.isEmpty ? 'Account' : username,
-            onSelected: (value) {
-              if (value == 'logout') onLogout();
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'logout', child: Text('Logout')),
+          child: Row(
+            children: [
+              _PillButton(label: 'All Files', selected: true, onPressed: () {}),
             ],
-            child: const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(Icons.account_circle_outlined, color: _kText),
+          ),
+        ),
+        if (totalCount > 0) ...[
+          const SizedBox(width: 16),
+          Text(
+            '$totalCount ITEMS',
+            style: const TextStyle(
+              fontFamily: 'Geist',
+              fontSize: 12,
+              color: _kSecondary,
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -1143,10 +1104,18 @@ class _DesktopFilesControls extends StatelessWidget {
 
     return Row(
       children: [
-        _PillButton(label: 'All Files', selected: true, onPressed: () {}),
-        const SizedBox(width: 8),
-        _PillButton(label: 'Current Folder', onPressed: () {}),
         const Spacer(),
+        _IconActionButton(
+          icon: Icons.grid_view,
+          label: 'Grid view',
+          onPressed: () {},
+        ),
+        _IconActionButton(
+          icon: Icons.view_list,
+          label: 'List view',
+          color: _kPrimary,
+          onPressed: () {},
+        ),
         _IconActionButton(
           icon: Icons.checklist,
           label: 'Select',
