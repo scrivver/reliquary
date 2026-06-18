@@ -134,6 +134,61 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> _activateUser(String username) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Re-enable user',
+          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          'Re-enable "$username"? They will be able to sign in again.',
+          style: TextStyle(fontFamily: 'Inter', fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'CANCEL',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'RE-ENABLE',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+                color: _kPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await widget.apiService.activateUser(username);
+      _loadUsers();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to re-enable user: $e',
+            style: TextStyle(fontFamily: 'Inter', fontSize: 13),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _changePassword(String username) async {
     final password = await showDialog<String>(
       context: context,
@@ -219,6 +274,7 @@ class _AdminScreenState extends State<AdminScreen> {
           padding: const EdgeInsets.only(bottom: 12),
           child: _UserCard(
             user: users[index - 1],
+            onActivateUser: _activateUser,
             onChangePassword: _changePassword,
             onDeleteUser: _deleteUser,
           ),
@@ -298,6 +354,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: _UserCard(
                     user: user,
+                    onActivateUser: _activateUser,
                     onChangePassword: _changePassword,
                     onDeleteUser: _deleteUser,
                   ),
@@ -411,11 +468,13 @@ class _DirectoryCard extends StatelessWidget {
 
 class _UserCard extends StatelessWidget {
   final Map<String, dynamic> user;
+  final void Function(String username) onActivateUser;
   final void Function(String username) onChangePassword;
   final void Function(Map<String, dynamic> user) onDeleteUser;
 
   const _UserCard({
     required this.user,
+    required this.onActivateUser,
     required this.onChangePassword,
     required this.onDeleteUser,
   });
@@ -543,12 +602,24 @@ class _UserCard extends StatelessWidget {
                 ),
               PopupMenuButton<String>(
                 onSelected: (action) {
+                  if (action == 'activate') onActivateUser(username);
                   if (action == 'password' && !deactivated) {
                     onChangePassword(username);
                   }
                   if (action == 'delete') onDeleteUser(user);
                 },
                 itemBuilder: (_) => [
+                  if (deactivated)
+                    const PopupMenuItem(
+                      value: 'activate',
+                      child: Text(
+                        'Re-enable',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   if (!deactivated)
                     const PopupMenuItem(
                       value: 'password',

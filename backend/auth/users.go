@@ -184,6 +184,21 @@ func (s *UserStore) Deactivate(ctx context.Context, username string) error {
 	return s.persist(ctx)
 }
 
+// Activate re-enables a deactivated user.
+func (s *UserStore) Activate(ctx context.Context, username string) error {
+	s.mu.Lock()
+	user, exists := s.users[username]
+	if !exists {
+		s.mu.Unlock()
+		return fmt.Errorf("user %q not found", username)
+	}
+	user.DeactivatedAt = nil
+	s.users[username] = user
+	s.mu.Unlock()
+
+	return s.persist(ctx)
+}
+
 // Delete removes a user.
 func (s *UserStore) Delete(ctx context.Context, username string) error {
 	s.mu.Lock()

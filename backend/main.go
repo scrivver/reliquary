@@ -171,6 +171,7 @@ func main() {
 				r.Post("/api/admin/users", adminH.CreateUser)
 				r.Get("/api/admin/users", adminH.ListUsers)
 				r.Delete("/api/admin/users/{username}", adminH.DeleteUser)
+				r.Put("/api/admin/users/{username}/activate", adminH.ActivateUser)
 				r.Put("/api/admin/users/{username}/password", adminH.ChangePassword)
 			})
 		}

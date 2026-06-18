@@ -171,6 +171,11 @@ class ApiService {
     );
   }
 
+  /// Re-enable a deactivated user.
+  Future<void> activateUser(String username) async {
+    await _dio.put('/api/admin/users/$username/activate');
+  }
+
   /// Change a user's password.
   Future<void> changePassword(String username, String newPassword) async {
     await _dio.put(

@@ -553,6 +553,34 @@ func (ah *AdminHandler) deleteUserData(ctx context.Context, username string) err
 	return nil
 }
 
+// ActivateUser re-enables a deactivated standard user.
+// PUT /api/admin/users/{username}/activate
+func (ah *AdminHandler) ActivateUser(w http.ResponseWriter, r *http.Request) {
+	username := r.PathValue("username")
+	if username == "" {
+		httpError(w, "username is required", http.StatusBadRequest)
+		return
+	}
+	targetUser, ok := ah.users.Get(username)
+	if !ok {
+		httpError(w, fmt.Sprintf("user %q not found", username), http.StatusNotFound)
+		return
+	}
+	if targetUser.Role == auth.RoleAdmin {
+		httpError(w, "admin accounts cannot be re-enabled by another admin", http.StatusForbidden)
+		return
+	}
+	if targetUser.DeactivatedAt == nil {
+		jsonResponse(w, map[string]string{"status": "already active"})
+		return
+	}
+	if err := ah.users.Activate(r.Context(), username); err != nil {
+		httpError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, map[string]string{"status": "active"})
+}
+
 // ChangePassword changes a user's password. Admins can change standard users;
 // every user can change their own password.
 // PUT /api/admin/users/{username}/password
