@@ -73,16 +73,20 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _deleteUser(String username) async {
+  Future<void> _deleteUser(Map<String, dynamic> user) async {
+    final username = user['username'] as String;
+    final deactivated = user['deactivated'] == true;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          'Delete user',
+          deactivated ? 'Permanently delete user' : 'Deactivate user',
           style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
         ),
         content: Text(
-          'Delete user "$username"? Their files will remain.',
+          deactivated
+              ? 'Permanently delete "$username" and all of their stored files, thumbnails, and metadata? This action is irreversible.'
+              : 'Deactivate "$username"? They will no longer be able to sign in. Their files will remain until you permanently delete the user.',
           style: TextStyle(fontFamily: 'Inter', fontSize: 13),
         ),
         actions: [
@@ -99,7 +103,7 @@ class _AdminScreenState extends State<AdminScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
-              'DELETE',
+              deactivated ? 'DELETE PERMANENTLY' : 'DEACTIVATE',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w600,
@@ -113,14 +117,16 @@ class _AdminScreenState extends State<AdminScreen> {
     if (confirm != true) return;
 
     try {
-      await widget.apiService.deleteUser(username);
+      await widget.apiService.deleteUser(username, permanent: deactivated);
       _loadUsers();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Failed to delete user: $e',
+            deactivated
+                ? 'Failed to permanently delete user: $e'
+                : 'Failed to deactivate user: $e',
             style: TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
         ),
@@ -406,7 +412,7 @@ class _DirectoryCard extends StatelessWidget {
 class _UserCard extends StatelessWidget {
   final Map<String, dynamic> user;
   final void Function(String username) onChangePassword;
-  final void Function(String username) onDeleteUser;
+  final void Function(Map<String, dynamic> user) onDeleteUser;
 
   const _UserCard({
     required this.user,
@@ -419,6 +425,7 @@ class _UserCard extends StatelessWidget {
     final username = user['username'] as String;
     final role = user['role'] as String;
     final createdAt = _formatCreatedAt(user['created_at'] as String?);
+    final deactivated = user['deactivated'] == true;
     final isAdmin = role == 'admin';
 
     final avatar = Container(
@@ -470,6 +477,7 @@ class _UserCard extends StatelessWidget {
               ),
             ),
             _RoleBadge(role: role),
+            if (deactivated) const _StatusBadge(label: 'Deactivated'),
           ],
         ),
         const SizedBox(height: 4),
@@ -502,7 +510,11 @@ class _UserCard extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          isAdmin ? 'Administrator' : 'Standard user',
+          deactivated
+              ? 'Deactivated'
+              : isAdmin
+              ? 'Administrator'
+              : 'Standard user',
           textAlign: TextAlign.end,
           style: const TextStyle(
             fontFamily: 'Geist',
@@ -519,36 +531,40 @@ class _UserCard extends StatelessWidget {
         : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                tooltip: 'Change password',
-                onPressed: () => onChangePassword(username),
-                icon: const Icon(Icons.edit_outlined, color: _kSecondary),
-                style: IconButton.styleFrom(
-                  hoverColor: const Color(0xFFFFDAD8),
-                  focusColor: const Color(0xFFFFDAD8),
+              if (!deactivated)
+                IconButton(
+                  tooltip: 'Change password',
+                  onPressed: () => onChangePassword(username),
+                  icon: const Icon(Icons.edit_outlined, color: _kSecondary),
+                  style: IconButton.styleFrom(
+                    hoverColor: const Color(0xFFFFDAD8),
+                    focusColor: const Color(0xFFFFDAD8),
+                  ),
                 ),
-              ),
               PopupMenuButton<String>(
                 onSelected: (action) {
-                  if (action == 'password') onChangePassword(username);
-                  if (action == 'delete') onDeleteUser(username);
+                  if (action == 'password' && !deactivated) {
+                    onChangePassword(username);
+                  }
+                  if (action == 'delete') onDeleteUser(user);
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'password',
-                    child: Text(
-                      'Change password',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.w600,
+                itemBuilder: (_) => [
+                  if (!deactivated)
+                    const PopupMenuItem(
+                      value: 'password',
+                      child: Text(
+                        'Change password',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
                   PopupMenuItem(
                     value: 'delete',
                     child: Text(
-                      'Delete',
-                      style: TextStyle(
+                      deactivated ? 'Delete permanently' : 'Deactivate',
+                      style: const TextStyle(
                         fontFamily: 'Inter',
                         fontWeight: FontWeight.w600,
                         color: _kPrimary,
@@ -1097,6 +1113,35 @@ class _RoleBadge extends StatelessWidget {
           fontWeight: FontWeight.w700,
           letterSpacing: 0.88,
           color: isAdmin ? Colors.white : _kSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+
+  const _StatusBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: _kSurfaceLow,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 11,
+          height: 16 / 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.88,
+          color: _kSecondary,
         ),
       ),
     );

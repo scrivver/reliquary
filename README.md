@@ -121,7 +121,8 @@ The server listens on a unix socket by default for use with the Caddy proxy. For
 | GET | `/api/admin/stats` | Admin | Aggregate analytics |
 | POST | `/api/admin/users` | Admin | Create standard user |
 | GET | `/api/admin/users` | Admin | List users |
-| DELETE | `/api/admin/users/{username}` | Admin | Delete standard user |
+| DELETE | `/api/admin/users/{username}` | Admin | Deactivate standard user |
+| DELETE | `/api/admin/users/{username}?permanent=true` | Admin | Permanently delete a deactivated standard user and their data |
 | PUT | `/api/admin/users/{username}/password` | Admin* | Change password |
 
 *Admin can change standard-user passwords; users can change their own.

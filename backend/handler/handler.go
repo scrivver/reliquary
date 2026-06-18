@@ -411,9 +411,11 @@ type CreateUserRequest struct {
 }
 
 type UserInfo struct {
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
+	Username      string `json:"username"`
+	Role          string `json:"role"`
+	CreatedAt     string `json:"created_at"`
+	DeactivatedAt string `json:"deactivated_at,omitempty"`
+	Deactivated   bool   `json:"deactivated,omitempty"`
 }
 
 type ChangePasswordRequest struct {
@@ -460,16 +462,22 @@ func (ah *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users := ah.users.List()
 	result := make([]UserInfo, 0, len(users))
 	for name, u := range users {
-		result = append(result, UserInfo{
+		info := UserInfo{
 			Username:  name,
 			Role:      string(u.Role),
 			CreatedAt: u.CreatedAt.Format(time.RFC3339),
-		})
+		}
+		if u.DeactivatedAt != nil {
+			info.Deactivated = true
+			info.DeactivatedAt = u.DeactivatedAt.Format(time.RFC3339)
+		}
+		result = append(result, info)
 	}
 	jsonResponse(w, result)
 }
 
-// DeleteUser deletes a user.
+// DeleteUser deactivates a standard user. If permanent=true is supplied, it
+// permanently deletes an already deactivated standard user and their data.
 // DELETE /api/admin/users/{username}
 func (ah *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
@@ -491,11 +499,58 @@ func (ah *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "admin accounts cannot be deleted by another admin", http.StatusForbidden)
 		return
 	}
+	permanent := r.URL.Query().Get("permanent") == "true"
+	if !permanent {
+		if targetUser.DeactivatedAt != nil {
+			jsonResponse(w, map[string]string{"status": "already deactivated"})
+			return
+		}
+		if err := ah.users.Deactivate(r.Context(), username); err != nil {
+			httpError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		jsonResponse(w, map[string]string{"status": "deactivated"})
+		return
+	}
+
+	if targetUser.DeactivatedAt == nil {
+		httpError(w, "user must be deactivated before permanent deletion", http.StatusConflict)
+		return
+	}
+	if err := ah.deleteUserData(r.Context(), username); err != nil {
+		slog.Error("failed to delete user data", "user", username, "error", err)
+		httpError(w, "failed to delete user data", http.StatusInternalServerError)
+		return
+	}
 	if err := ah.users.Delete(r.Context(), username); err != nil {
 		httpError(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "deleted"})
+}
+
+func (ah *AdminHandler) deleteUserData(ctx context.Context, username string) error {
+	prefixes := []string{
+		"files/" + username + "/",
+		"thumbs/" + username + "/",
+		"archive/" + username + "/",
+		"archive-thumbs/" + username + "/",
+	}
+	for _, prefix := range prefixes {
+		objects, err := ah.store.ListObjects(ctx, prefix)
+		if err != nil {
+			return fmt.Errorf("list %q: %w", prefix, err)
+		}
+		for _, obj := range objects {
+			if err := ah.store.DeleteObject(ctx, obj.Key); err != nil {
+				return fmt.Errorf("delete %q: %w", obj.Key, err)
+			}
+		}
+	}
+	if err := ah.store.DeleteObject(ctx, username+"/checksums.json"); err != nil && !storage.IsObjectNotFound(err) {
+		return fmt.Errorf("delete checksum index: %w", err)
+	}
+	return nil
 }
 
 // ChangePassword changes a user's password. Admins can change standard users;
@@ -518,6 +573,10 @@ func (ah *AdminHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		targetUser, ok := ah.users.Get(target)
 		if !ok {
 			httpError(w, fmt.Sprintf("user %q not found", target), http.StatusNotFound)
+			return
+		}
+		if targetUser.DeactivatedAt != nil {
+			httpError(w, "deactivated user passwords cannot be changed", http.StatusConflict)
 			return
 		}
 		if targetUser.Role == auth.RoleAdmin {

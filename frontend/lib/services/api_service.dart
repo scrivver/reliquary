@@ -164,8 +164,11 @@ class ApiService {
   }
 
   /// Delete a user (admin only).
-  Future<void> deleteUser(String username) async {
-    await _dio.delete('/api/admin/users/$username');
+  Future<void> deleteUser(String username, {bool permanent = false}) async {
+    await _dio.delete(
+      '/api/admin/users/$username',
+      queryParameters: permanent ? {'permanent': 'true'} : null,
+    );
   }
 
   /// Change a user's password.

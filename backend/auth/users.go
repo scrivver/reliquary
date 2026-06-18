@@ -25,9 +25,10 @@ const (
 )
 
 type User struct {
-	PasswordHash string    `json:"password_hash"`
-	Role         Role      `json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
+	PasswordHash  string     `json:"password_hash"`
+	Role          Role       `json:"role"`
+	CreatedAt     time.Time  `json:"created_at"`
+	DeactivatedAt *time.Time `json:"deactivated_at,omitempty"`
 }
 
 type UserStore struct {
@@ -114,6 +115,9 @@ func (s *UserStore) Authenticate(username, password string) (*User, error) {
 	if !exists {
 		return nil, fmt.Errorf("user not found")
 	}
+	if user.DeactivatedAt != nil {
+		return nil, fmt.Errorf("user is deactivated")
+	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, fmt.Errorf("invalid password")
@@ -158,6 +162,22 @@ func (s *UserStore) ChangePassword(ctx context.Context, username, newPassword st
 		return fmt.Errorf("user %q not found", username)
 	}
 	user.PasswordHash = string(hash)
+	s.users[username] = user
+	s.mu.Unlock()
+
+	return s.persist(ctx)
+}
+
+// Deactivate disables a user without deleting their stored files.
+func (s *UserStore) Deactivate(ctx context.Context, username string) error {
+	s.mu.Lock()
+	user, exists := s.users[username]
+	if !exists {
+		s.mu.Unlock()
+		return fmt.Errorf("user %q not found", username)
+	}
+	now := time.Now().UTC()
+	user.DeactivatedAt = &now
 	s.users[username] = user
 	s.mu.Unlock()
 
