@@ -514,52 +514,51 @@ class _UserCard extends StatelessWidget {
       ],
     );
 
-    final actions = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (!isAdmin)
-          IconButton(
-            tooltip: 'Change password',
-            onPressed: () => onChangePassword(username),
-            icon: const Icon(Icons.edit_outlined, color: _kSecondary),
-            style: IconButton.styleFrom(
-              hoverColor: const Color(0xFFFFDAD8),
-              focusColor: const Color(0xFFFFDAD8),
-            ),
-          ),
-        PopupMenuButton<String>(
-          onSelected: (action) {
-            if (action == 'password' && !isAdmin) onChangePassword(username);
-            if (action == 'delete' && !isAdmin) onDeleteUser(username);
-          },
-          itemBuilder: (_) => [
-            if (!isAdmin)
-              const PopupMenuItem(
-                value: 'password',
-                child: Text(
-                  'Change password',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
-                  ),
+    final actions = isAdmin
+        ? const SizedBox.shrink()
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Change password',
+                onPressed: () => onChangePassword(username),
+                icon: const Icon(Icons.edit_outlined, color: _kSecondary),
+                style: IconButton.styleFrom(
+                  hoverColor: const Color(0xFFFFDAD8),
+                  focusColor: const Color(0xFFFFDAD8),
                 ),
               ),
-            if (!isAdmin)
-              const PopupMenuItem(
-                value: 'delete',
-                child: Text(
-                  'Delete',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w600,
-                    color: _kPrimary,
+              PopupMenuButton<String>(
+                onSelected: (action) {
+                  if (action == 'password') onChangePassword(username);
+                  if (action == 'delete') onDeleteUser(username);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'password',
+                    child: Text(
+                      'Change password',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text(
+                      'Delete',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w600,
+                        color: _kPrimary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-          ],
-        ),
-      ],
-    );
+            ],
+          );
 
     return _DirectoryCard(
       child: LayoutBuilder(
