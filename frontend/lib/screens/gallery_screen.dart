@@ -26,15 +26,14 @@ class GalleryScreen extends StatefulWidget {
 class _GalleryScreenState extends State<GalleryScreen> {
   final List<FileItem> _files = [];
   bool _loading = true;
-  bool _loadingMore = false;
-  bool _hasMore = false;
   int _totalCount = 0;
   String? _error;
   String _username = '';
+  String _currentPath = '';
   bool _selectMode = false;
   final Set<String> _selected = {};
 
-  static const _pageSize = 50;
+  static const _pageSize = 200;
 
   @override
   void initState() {
@@ -66,17 +65,28 @@ class _GalleryScreenState extends State<GalleryScreen> {
     });
 
     try {
-      final result = await widget.apiService.listFiles(
-        offset: 0,
-        limit: _pageSize,
-      );
+      final files = <FileItem>[];
+      var offset = 0;
+      var totalCount = 0;
+      var hasMore = true;
+
+      while (hasMore) {
+        final result = await widget.apiService.listFiles(
+          offset: offset,
+          limit: _pageSize,
+        );
+        files.addAll(result.files);
+        totalCount = result.totalCount;
+        offset += result.files.length;
+        hasMore = result.hasMore && result.files.isNotEmpty;
+      }
+
       if (!mounted) return;
       setState(() {
         _files
           ..clear()
-          ..addAll(result.files);
-        _totalCount = result.totalCount;
-        _hasMore = result.hasMore;
+          ..addAll(files);
+        _totalCount = totalCount;
         _loading = false;
       });
     } catch (e) {
@@ -85,28 +95,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
         _error = 'Failed to load files';
         _loading = false;
       });
-    }
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-
-    try {
-      final result = await widget.apiService.listFiles(
-        offset: _files.length,
-        limit: _pageSize,
-      );
-      if (!mounted) return;
-      setState(() {
-        _files.addAll(result.files);
-        _totalCount = result.totalCount;
-        _hasMore = result.hasMore;
-        _loadingMore = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _loadingMore = false);
     }
   }
 
@@ -176,7 +164,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
             appBar: AppBar(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
-              title: Text(file.originalName ?? file.filename),
+              title: Text(file.displayPath),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.info_outline),
@@ -213,11 +201,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(file.originalName ?? file.filename),
+        title: Text(file.displayPath),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _detailRow('PATH', file.displayPath),
             _detailRow('TYPE', file.contentType),
             _detailRow('SIZE', _formatSize(file.size)),
             if (file.uploadDate != null)
@@ -295,7 +284,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   void _selectAll() {
     setState(() {
-      _selected.addAll(_files.map((f) => f.key));
+      _selected.addAll(_visibleFiles().map((f) => f.key));
     });
   }
 
@@ -419,6 +408,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final visibleFiles = _visibleFiles();
+    final visibleFolders = _visibleFolders();
+    final itemCount = visibleFolders.length + visibleFiles.length;
+
     return Scaffold(
       appBar: AppBar(
         leading: _selectMode
@@ -438,12 +431,21 @@ class _GalleryScreenState extends State<GalleryScreen> {
               )
             : Row(
                 children: [
-                  Text(
-                    'FILES_ROOT',
-                    style: TextStyle(
-                      fontFamily: 'Space Mono',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                  if (_currentPath.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, size: 20),
+                      onPressed: _goUpFolder,
+                      tooltip: 'UP_FOLDER',
+                    ),
+                  Expanded(
+                    child: Text(
+                      _currentPath.isEmpty ? 'FILES_ROOT' : _currentPath,
+                      style: TextStyle(
+                        fontFamily: 'Space Mono',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -505,7 +507,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       ),
                     ),
                   ),
-                if (_files.isNotEmpty)
+                if (visibleFiles.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.checklist, size: 20),
                     onPressed: () => setState(() => _selectMode = true),
@@ -518,7 +520,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
               ],
       ),
-      body: _buildBody(),
+      body: _buildBody(visibleFolders, visibleFiles, itemCount),
       floatingActionButton: _selectMode
           ? null
           : FloatingActionButton(
@@ -538,7 +540,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(
+    List<_FolderEntry> visibleFolders,
+    List<FileItem> visibleFiles,
+    int itemCount,
+  ) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -577,48 +583,118 @@ class _GalleryScreenState extends State<GalleryScreen> {
       );
     }
 
+    if (itemCount == 0) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.folder_open, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              'FOLDER_EMPTY',
+              style: TextStyle(fontFamily: 'Space Mono', color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: _loadFiles,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (notification is ScrollEndNotification &&
-              notification.metrics.extentAfter < 200) {
-            _loadMore();
-          }
-          return false;
-        },
-        child: GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 200,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-          ),
-          itemCount: _files.length + (_hasMore ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index >= _files.length) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final file = _files[index];
-            final isSelected = _selected.contains(file.key);
-            return _FileTile(
-              file: file,
-              apiService: widget.apiService,
-              selected: _selectMode ? isSelected : null,
-              onTap: _selectMode
-                  ? () => _toggleSelect(file)
-                  : () => _openFile(file),
-              onLongPress: _selectMode
-                  ? null
-                  : () {
-                      setState(() => _selectMode = true);
-                      _toggleSelect(file);
-                    },
-            );
-          },
+      child: GridView.builder(
+        padding: const EdgeInsets.all(8),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 200,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
         ),
+        itemCount: itemCount,
+        itemBuilder: (context, index) {
+          if (index < visibleFolders.length) {
+            final folder = visibleFolders[index];
+            return _FolderTile(
+              folder: folder,
+              onTap: () => _openFolder(folder.path),
+            );
+          }
+
+          final file = visibleFiles[index - visibleFolders.length];
+          final isSelected = _selected.contains(file.key);
+          return _FileTile(
+            file: file,
+            label: _labelForFile(file),
+            apiService: widget.apiService,
+            selected: _selectMode ? isSelected : null,
+            onTap: _selectMode
+                ? () => _toggleSelect(file)
+                : () => _openFile(file),
+            onLongPress: _selectMode
+                ? null
+                : () {
+                    setState(() => _selectMode = true);
+                    _toggleSelect(file);
+                  },
+          );
+        },
       ),
     );
+  }
+
+  List<_FolderEntry> _visibleFolders() {
+    final folders = <String, int>{};
+    final prefix = _currentPath.isEmpty ? '' : '$_currentPath/';
+
+    for (final file in _files) {
+      final path = file.displayPath;
+      if (!path.startsWith(prefix)) continue;
+      final rest = path.substring(prefix.length);
+      final slash = rest.indexOf('/');
+      if (slash == -1) continue;
+      final name = rest.substring(0, slash);
+      final folderPath = prefix + name;
+      folders[folderPath] = (folders[folderPath] ?? 0) + 1;
+    }
+
+    final entries =
+        folders.entries
+            .map((entry) => _FolderEntry(path: entry.key, count: entry.value))
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    return entries;
+  }
+
+  List<FileItem> _visibleFiles() {
+    final prefix = _currentPath.isEmpty ? '' : '$_currentPath/';
+    final files = _files.where((file) {
+      final path = file.displayPath;
+      if (!path.startsWith(prefix)) return false;
+      return !path.substring(prefix.length).contains('/');
+    }).toList()..sort((a, b) => a.displayPath.compareTo(b.displayPath));
+    return files;
+  }
+
+  String _labelForFile(FileItem file) {
+    if (_currentPath.isEmpty) return file.displayPath;
+    final prefix = '$_currentPath/';
+    if (!file.displayPath.startsWith(prefix)) return file.displayPath;
+    return file.displayPath.substring(prefix.length);
+  }
+
+  void _openFolder(String path) {
+    setState(() {
+      _currentPath = path;
+      _selectMode = false;
+      _selected.clear();
+    });
+  }
+
+  void _goUpFolder() {
+    setState(() {
+      final slash = _currentPath.lastIndexOf('/');
+      _currentPath = slash == -1 ? '' : _currentPath.substring(0, slash);
+      _selectMode = false;
+      _selected.clear();
+    });
   }
 
   String _formatSize(int bytes) {
@@ -628,8 +704,71 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 }
 
+class _FolderEntry {
+  final String path;
+  final int count;
+
+  const _FolderEntry({required this.path, required this.count});
+
+  String get name => path.split('/').last;
+}
+
+class _FolderTile extends StatelessWidget {
+  final _FolderEntry folder;
+  final VoidCallback onTap;
+
+  const _FolderTile({required this.folder, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F5F5),
+          border: Border.all(color: const Color(0xFFE0E0E0)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.folder, size: 42, color: Colors.grey[500]),
+                const SizedBox(height: 8),
+                Text(
+                  folder.name,
+                  style: const TextStyle(
+                    fontFamily: 'Space Mono',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${folder.count} ITEMS',
+                  style: TextStyle(
+                    fontFamily: 'Space Mono',
+                    fontSize: 9,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FileTile extends StatefulWidget {
   final FileItem file;
+  final String label;
   final ApiService apiService;
   final bool? selected; // null = not in select mode
   final VoidCallback onTap;
@@ -637,6 +776,7 @@ class _FileTile extends StatefulWidget {
 
   const _FileTile({
     required this.file,
+    required this.label,
     required this.apiService,
     this.selected,
     required this.onTap,
@@ -699,6 +839,7 @@ class _FileTileState extends State<_FileTile> {
                     )
                   : _placeholder(),
             ),
+            if (_thumbUrl != null) _labelOverlay(),
             if (inSelectMode)
               Positioned(
                 top: 6,
@@ -740,7 +881,7 @@ class _FileTileState extends State<_FileTile> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
-              widget.file.filename,
+              widget.label,
               style: TextStyle(
                 fontFamily: 'Space Mono',
                 fontSize: 9,
@@ -752,6 +893,38 @@ class _FileTileState extends State<_FileTile> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _labelOverlay() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              Colors.black.withValues(alpha: 0.72),
+              Colors.black.withValues(alpha: 0.0),
+            ],
+          ),
+        ),
+        child: Text(
+          widget.label,
+          style: const TextStyle(
+            fontFamily: 'Space Mono',
+            fontSize: 9,
+            color: Colors.white,
+          ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }

@@ -35,6 +35,12 @@ class FileItem {
 
   String get filename => key.split('/').last;
 
+  String get displayPath {
+    final parts = key.split('/');
+    if (parts.length <= 4) return filename;
+    return parts.sublist(4).join('/');
+  }
+
   bool get isImage => contentType.startsWith('image/');
 
   bool get isVideo => contentType.startsWith('video/');
