@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime/multipart"
@@ -383,7 +384,7 @@ func TestDuplicateUploadRepublishesCreate(t *testing.T) {
 	}
 }
 
-func TestUploadReturnsServiceUnavailableAfterThumbnailPublishFailure(t *testing.T) {
+func TestUploadSucceedsAfterThumbnailPublishFailure(t *testing.T) {
 	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
 	emitter := &fakeEmitter{}
 	h := &Handler{
@@ -398,14 +399,21 @@ func TestUploadReturnsServiceUnavailableAfterThumbnailPublishFailure(t *testing.
 	res := httptest.NewRecorder()
 	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
 
-	if res.Code != http.StatusServiceUnavailable {
+	if res.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
 	if len(store.objects) != 1 {
 		t.Fatalf("stored objects=%d, want 1", len(store.objects))
 	}
-	if len(emitter.events) != 0 {
-		t.Fatalf("create event published after thumbnail failure: %+v", emitter.events)
+	if len(emitter.events) != 1 {
+		t.Fatalf("create event not published after thumbnail failure: %+v", emitter.events)
+	}
+	var got UploadResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Warning == "" {
+		t.Fatalf("warning is empty: %+v", got)
 	}
 }
 

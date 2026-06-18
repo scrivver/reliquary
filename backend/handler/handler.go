@@ -76,6 +76,7 @@ type UploadResponse struct {
 	Key       string `json:"key"`
 	Size      int64  `json:"size"`
 	Duplicate bool   `json:"duplicate,omitempty"`
+	Warning   string `json:"warning,omitempty"`
 }
 
 type FileItem struct {
@@ -176,17 +177,18 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		if existingContentType == "" {
 			existingContentType = contentType
 		}
-		if err := h.publishUploadEffects(
+		warning, err := h.publishUploadEffects(
 			r.Context(),
 			existingKey,
 			existingContentType,
 			checksum,
-		); err != nil {
+		)
+		if err != nil {
 			slog.Error("failed to republish upload effects", "key", existingKey, "error", err)
 			httpError(w, "file exists but background work could not be published; retry upload", http.StatusServiceUnavailable)
 			return
 		}
-		jsonResponse(w, UploadResponse{Key: existingKey, Size: int64(len(data)), Duplicate: true})
+		jsonResponse(w, UploadResponse{Key: existingKey, Size: int64(len(data)), Duplicate: true, Warning: warning})
 		return
 	}
 
@@ -209,13 +211,14 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update checksum index", "error", err)
 	}
 
-	if err := h.publishUploadEffects(r.Context(), fileKey, contentType, checksum); err != nil {
+	warning, err := h.publishUploadEffects(r.Context(), fileKey, contentType, checksum)
+	if err != nil {
 		slog.Error("failed to publish upload effects", "key", fileKey, "error", err)
 		httpError(w, "file stored but background work could not be published; retry upload", http.StatusServiceUnavailable)
 		return
 	}
 
-	jsonResponse(w, UploadResponse{Key: fileKey, Size: header.Size})
+	jsonResponse(w, UploadResponse{Key: fileKey, Size: header.Size, Warning: warning})
 }
 
 // ListFiles returns files with pagination support.
@@ -380,7 +383,8 @@ func (h *Handler) publishUploadEffects(
 	key string,
 	contentType string,
 	checksum string,
-) error {
+) (string, error) {
+	var warning string
 	if thumbnail.SupportedContentType(contentType) {
 		if err := h.thumbs.Publish(ctx, thumbnail.Job{
 			Version:     thumbnail.JobVersion,
@@ -388,13 +392,14 @@ func (h *Handler) publishUploadEffects(
 			ContentType: contentType,
 			Checksum:    checksum,
 		}); err != nil {
-			return fmt.Errorf("publish thumbnail job: %w", err)
+			slog.Warn("thumbnail job could not be published", "key", key, "error", err)
+			warning = "thumbnail generation is pending because background work is unavailable"
 		}
 	}
 	if err := h.emitCreate(ctx, key, checksum); err != nil {
-		return fmt.Errorf("publish create event: %w", err)
+		return warning, fmt.Errorf("publish create event: %w", err)
 	}
-	return nil
+	return warning, nil
 }
 
 // --- Admin handlers ---

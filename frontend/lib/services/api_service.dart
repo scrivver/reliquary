@@ -39,7 +39,7 @@ class ApiService {
 
   /// Upload a file through the Go backend (multipart).
   /// Returns the key and whether it was a duplicate.
-  Future<({String key, bool duplicate})> uploadFile(
+  Future<({String key, bool duplicate, String? warning})> uploadFile(
     String filename,
     List<int> bytes,
     String contentType, {
@@ -67,6 +67,7 @@ class ApiService {
     return (
       key: response.data['key'] as String,
       duplicate: response.data['duplicate'] == true,
+      warning: response.data['warning'] as String?,
     );
   }
 

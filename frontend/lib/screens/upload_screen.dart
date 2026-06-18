@@ -106,7 +106,13 @@ class _UploadScreenState extends State<UploadScreen> {
 
         setState(() {
           _progress[key] = _UploadProgress(
-            status: result.duplicate ? 'DUPLICATE_SKIPPED' : 'PRESERVED',
+            status: result.warning != null
+                ? (result.duplicate
+                      ? 'DUPLICATE_SKIPPED - THUMBNAIL_PENDING'
+                      : 'PRESERVED - THUMBNAIL_PENDING')
+                : result.duplicate
+                ? 'DUPLICATE_SKIPPED'
+                : 'PRESERVED',
             fraction: 1.0,
             done: true,
           );
