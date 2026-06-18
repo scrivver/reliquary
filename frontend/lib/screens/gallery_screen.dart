@@ -44,6 +44,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   bool _searching = false;
   bool _selectMode = false;
   final Set<String> _selected = {};
+  FileItem? _detailFile;
 
   static const _pageSize = 200;
 
@@ -138,6 +139,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     try {
       await widget.apiService.deleteFile(file.key);
+      if (_detailFile?.key == file.key) {
+        setState(() => _detailFile = null);
+      }
       _loadFiles();
     } catch (e) {
       if (!mounted) return;
@@ -160,6 +164,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   Future<void> _openFile(FileItem file) async {
+    if (isDesktopWidth(context)) {
+      setState(() => _detailFile = file);
+      return;
+    }
+
     if (file.isImage) {
       _viewFullImage(file);
     } else {
@@ -425,7 +434,22 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (isDesktop) {
       return Scaffold(
         backgroundColor: _kSurface,
-        body: _buildDesktopBody(visibleFolders, visibleFiles, itemCount),
+        body: Stack(
+          children: [
+            _buildDesktopBody(visibleFolders, visibleFiles, itemCount),
+            _DesktopDetailsDrawer(
+              file: _detailFile,
+              size: _detailFile == null ? null : _formatSize(_detailFile!.size),
+              onClose: () => setState(() => _detailFile = null),
+              onDownload: _detailFile == null
+                  ? null
+                  : () => _downloadFile(_detailFile!),
+              onDelete: _detailFile == null
+                  ? null
+                  : () => _deleteFile(_detailFile!),
+            ),
+          ],
+        ),
         floatingActionButton: _selectMode
             ? null
             : FloatingActionButton.extended(
@@ -660,7 +684,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 onClearSelection: _exitSelectMode,
               ),
               const SizedBox(height: 16),
-              _buildDesktopList(visibleFolders, visibleFiles, itemCount),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildDesktopList(
+                      visibleFolders,
+                      visibleFiles,
+                      itemCount,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -733,6 +768,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               label: _labelForFile(file),
               size: _formatSize(file.size),
               selected: _selectMode ? _selected.contains(file.key) : null,
+              highlighted: !_selectMode && _detailFile?.key == file.key,
               onTap: _selectMode
                   ? () => _toggleSelect(file)
                   : () => _openFile(file),
@@ -944,6 +980,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _currentPath = path;
       _selectMode = false;
       _selected.clear();
+      _detailFile = null;
     });
   }
 
@@ -953,6 +990,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       _currentPath = slash == -1 ? '' : _currentPath.substring(0, slash);
       _selectMode = false;
       _selected.clear();
+      _detailFile = null;
     });
   }
 
@@ -1253,6 +1291,7 @@ class _DesktopFileRow extends StatelessWidget {
   final String label;
   final String size;
   final bool? selected;
+  final bool highlighted;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final VoidCallback onDownload;
@@ -1263,6 +1302,7 @@ class _DesktopFileRow extends StatelessWidget {
     required this.label,
     required this.size,
     required this.selected,
+    this.highlighted = false,
     required this.onTap,
     required this.onLongPress,
     required this.onDownload,
@@ -1276,7 +1316,7 @@ class _DesktopFileRow extends StatelessWidget {
     return _DesktopExplorerRow(
       onTap: onTap,
       onLongPress: onLongPress,
-      selected: isSelected,
+      selected: isSelected || highlighted,
       leading: Stack(
         children: [
           _ExplorerIcon(
@@ -1481,6 +1521,293 @@ class _MetaText extends StatelessWidget {
         fontSize: 14,
         height: 20 / 14,
         color: _kSecondary,
+      ),
+    );
+  }
+}
+
+class _DesktopDetailsDrawer extends StatelessWidget {
+  final FileItem? file;
+  final String? size;
+  final VoidCallback onClose;
+  final VoidCallback? onDownload;
+  final VoidCallback? onDelete;
+
+  const _DesktopDetailsDrawer({
+    required this.file,
+    required this.size,
+    required this.onClose,
+    required this.onDownload,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedFile = file;
+    return IgnorePointer(
+      ignoring: selectedFile == null,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+        offset: selectedFile == null ? const Offset(1, 0) : Offset.zero,
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 180),
+            opacity: selectedFile == null ? 0 : 1,
+            child: SizedBox(
+              width: 360,
+              height: double.infinity,
+              child: Material(
+                color: _kCard,
+                elevation: 16,
+                shadowColor: Colors.black.withValues(alpha: 0.18),
+                child: selectedFile == null
+                    ? const SizedBox.shrink()
+                    : _DesktopDetailsContent(
+                        file: selectedFile,
+                        size: size ?? '',
+                        onClose: onClose,
+                        onDownload: onDownload,
+                        onDelete: onDelete,
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopDetailsContent extends StatelessWidget {
+  final FileItem file;
+  final String size;
+  final VoidCallback onClose;
+  final VoidCallback? onDownload;
+  final VoidCallback? onDelete;
+
+  const _DesktopDetailsContent({
+    required this.file,
+    required this.size,
+    required this.onClose,
+    required this.onDownload,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(left: BorderSide(color: _kBorder)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'DETAILS',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      height: 16 / 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.96,
+                      color: _kText,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close details',
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close, size: 20, color: _kSecondary),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: _kBorder),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 180,
+                    decoration: BoxDecoration(
+                      color: _kSurfaceLow,
+                      border: Border.all(color: _kBorder),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        _iconForContentType(file.contentType),
+                        size: 54,
+                        color: _tintForContentType(file.contentType),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    file.filename,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 20,
+                      height: 28 / 20,
+                      fontWeight: FontWeight.w600,
+                      color: _kText,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    runSpacing: 16,
+                    spacing: 20,
+                    children: [
+                      _DetailField(
+                        label: 'TYPE',
+                        value: _displayType(file.contentType),
+                      ),
+                      _DetailField(label: 'SIZE', value: size),
+                      _DetailField(
+                        label: 'MODIFIED',
+                        value: _formatDate(file.lastModified),
+                      ),
+                      _DetailField(label: 'LOCATION', value: file.displayPath),
+                      if (file.uploadDate != null)
+                        _DetailField(
+                          label: 'UPLOADED',
+                          value: file.uploadDate!,
+                        ),
+                      if (file.checksum != null)
+                        _DetailField(
+                          label: 'SHA-256',
+                          value: '${file.checksum!.substring(0, 16)}...',
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              color: _kSurfaceLow,
+              border: Border(top: BorderSide(color: _kBorder)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _kText,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: onDownload,
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: const Text('DOWNLOAD'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  tooltip: 'Delete',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline, color: _kPrimary),
+                  style: IconButton.styleFrom(
+                    backgroundColor: _kCard,
+                    side: const BorderSide(color: _kBorder),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForContentType(String contentType) {
+    if (contentType.startsWith('image/')) return Icons.image_outlined;
+    if (contentType.startsWith('video/')) return Icons.videocam_outlined;
+    if (contentType.startsWith('audio/')) return Icons.audiotrack_outlined;
+    if (contentType.contains('pdf')) return Icons.picture_as_pdf_outlined;
+    if (contentType.contains('zip') || contentType.contains('archive')) {
+      return Icons.archive_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  Color _tintForContentType(String contentType) {
+    if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
+      return const Color(0xFF006860);
+    }
+    return _kPrimary;
+  }
+
+  String _displayType(String contentType) {
+    final slash = contentType.indexOf('/');
+    if (slash == -1) return contentType;
+    return contentType.substring(0, slash).toUpperCase();
+  }
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
+}
+
+class _DetailField extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailField({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 140,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              height: 16 / 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.96,
+              color: _kSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 14,
+              height: 20 / 14,
+              color: _kText,
+            ),
+          ),
+        ],
       ),
     );
   }
