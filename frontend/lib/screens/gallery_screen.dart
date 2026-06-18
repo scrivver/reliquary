@@ -693,7 +693,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     OutlinedButton.icon(
                       onPressed: _goUpFolder,
                       icon: const Icon(Icons.arrow_back, size: 18),
-                      label: const Text('UP FOLDER'),
+                      label: const Text('Back'),
                     ),
                   ],
                 ],

@@ -167,7 +167,7 @@ class _StatsScreenState extends State<StatsScreen> {
                   child: DesktopPageHeader(
                     title: 'Vault Status',
                     subtitle:
-                        'Comprehensive health and distribution report for the primary archive.',
+                        'Storage usage and object distribution for the primary archive.',
                   ),
                 ),
                 const SizedBox(width: 24),
@@ -379,7 +379,6 @@ class _StorageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final density = fileCount == 0 ? 0.0 : (totalSize / fileCount);
-    final fill = (density / (1024 * 1024 * 128)).clamp(0.08, 1.0);
     return _StatusCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,7 +387,7 @@ class _StorageCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Icon(Icons.storage_outlined, color: _kPrimary, size: 24),
-              _CapsLabel('STORAGE CAPACITY'),
+              _CapsLabel('STORAGE USED'),
             ],
           ),
           const SizedBox(height: 24),
@@ -415,7 +414,7 @@ class _StorageCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Stored in the primary archive',
+                      'Tracked in the primary archive',
                       style: TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 14,
@@ -447,19 +446,26 @@ class _StorageCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 32),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: fill,
-              minHeight: 4,
-              backgroundColor: _kSurface,
-              color: _kText,
+          Container(
+            padding: const EdgeInsets.only(top: 24),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: _kBorder.withValues(alpha: 0.55)),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [_CapsLabel('LIGHT'), _CapsLabel('DENSE')],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _StorageMetric(
+                  label: 'AVERAGE OBJECT',
+                  value: _formatSize(density.round()),
+                ),
+                _StorageMetric(
+                  label: 'OBJECT COUNT',
+                  value: fileCount.toString(),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -473,6 +479,34 @@ class _StorageCard extends StatelessWidget {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+}
+
+class _StorageMetric extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _StorageMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _CapsLabel(label),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 18,
+            height: 26 / 18,
+            fontWeight: FontWeight.w600,
+            color: _kText,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -505,8 +539,8 @@ class _ArchiveHealthCard extends StatelessWidget {
           const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.monitor_heart_outlined, color: _kPrimary, size: 24),
-              _CapsLabel('PRIMARY NODE HEALTH'),
+              Icon(Icons.donut_large_outlined, color: _kPrimary, size: 24),
+              _CapsLabel('OBJECT BREAKDOWN'),
             ],
           ),
           const SizedBox(height: 24),

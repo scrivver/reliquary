@@ -228,8 +228,10 @@ class _AdminScreenState extends State<AdminScreen> {
     return _users.where((user) {
       final username = (user['username'] as String?) ?? '';
       final role = (user['role'] as String?) ?? '';
+      final createdAt = (user['created_at'] as String?) ?? '';
       return username.toLowerCase().contains(normalizedQuery) ||
-          role.toLowerCase().contains(normalizedQuery);
+          role.toLowerCase().contains(normalizedQuery) ||
+          createdAt.toLowerCase().contains(normalizedQuery);
     }).toList();
   }
 
@@ -457,6 +459,7 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final username = user['username'] as String;
     final role = user['role'] as String;
+    final createdAt = _formatCreatedAt(user['created_at'] as String?);
     final isAdmin = role == 'admin';
 
     final avatar = Container(
@@ -512,7 +515,7 @@ class _UserCard extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '$username@reliquary.archive',
+          createdAt == null ? 'Local password account' : 'Created $createdAt',
           style: const TextStyle(
             fontFamily: 'Inter',
             fontSize: 14,
@@ -524,11 +527,11 @@ class _UserCard extends StatelessWidget {
       ],
     );
 
-    const activity = Column(
+    final activity = Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text(
-          'LAST ACTIVITY',
+        const Text(
+          'ACCOUNT TYPE',
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 12,
@@ -538,11 +541,11 @@ class _UserCard extends StatelessWidget {
             color: _kSecondary,
           ),
         ),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text(
-          'Account active',
+          isAdmin ? 'Administrator' : 'Standard user',
           textAlign: TextAlign.end,
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'Geist',
             fontSize: 12,
             height: 16 / 12,
@@ -634,6 +637,16 @@ class _UserCard extends StatelessWidget {
         },
       ),
     );
+  }
+
+  String? _formatCreatedAt(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return null;
+    final local = parsed.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
   }
 }
 
