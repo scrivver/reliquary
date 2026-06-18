@@ -119,14 +119,29 @@ The server listens on a unix socket by default for use with the Caddy proxy. For
 | DELETE | `/api/files?key=...` | Yes | Delete file and thumbnail |
 | GET | `/api/stats` | Yes | Storage analytics |
 | GET | `/api/admin/stats` | Admin | Aggregate analytics |
-| POST | `/api/admin/users` | Admin | Create user |
+| POST | `/api/admin/users` | Admin | Create standard user |
 | GET | `/api/admin/users` | Admin | List users |
-| DELETE | `/api/admin/users/{username}` | Admin | Delete user |
+| DELETE | `/api/admin/users/{username}` | Admin | Delete standard user |
 | PUT | `/api/admin/users/{username}/password` | Admin* | Change password |
 
-*Admin can change any password; users can change their own.
+*Admin can change standard-user passwords; users can change their own.
 
 Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_PASSWORD` env vars).
+
+Additional admin users are intentionally not creatable through the web UI/API.
+Create them from the backend with the user-management command after loading the
+same environment used by the API:
+
+```bash
+cd backend
+RELIQUARY_USER_PASSWORD='change-me' go run ./cmd/reliquary-user create-admin --username alice
+```
+
+The same command can also create a standard user:
+
+```bash
+RELIQUARY_USER_PASSWORD='change-me' go run ./cmd/reliquary-user create-user --username bob
+```
 
 #### Configuration
 

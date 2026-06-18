@@ -508,11 +508,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
             : null,
         title: _selectMode
             ? Text(
-                '${_selected.length} SELECTED',
-                style: TextStyle(
-                  fontFamily: 'Space Mono',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                '${_selected.length} selected',
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
                 ),
               )
             : _searching
@@ -520,10 +521,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 controller: _searchController,
                 autofocus: true,
                 decoration: const InputDecoration(
-                  hintText: 'Search artifacts...',
+                  hintText: 'Search files...',
                   border: InputBorder.none,
                 ),
-                style: const TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+                style: const TextStyle(fontFamily: 'Inter', fontSize: 16),
                 textInputAction: TextInputAction.search,
                 onChanged: (value) {
                   setState(() => _searchQuery = value);
@@ -535,39 +536,25 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     IconButton(
                       icon: const Icon(Icons.arrow_back, size: 20),
                       onPressed: _goUpFolder,
-                      tooltip: 'UP_FOLDER',
+                      tooltip: 'Back',
                     ),
                   Expanded(
                     child: Text(
-                      _currentPath.isEmpty ? 'FILES_ROOT' : _currentPath,
-                      style: TextStyle(
-                        fontFamily: 'Space Mono',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                      _currentPath.isEmpty
+                          ? 'Files'
+                          : _currentPath.split('/').last,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _kPrimary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _username.toUpperCase(),
-                      style: TextStyle(
-                        fontFamily: 'Space Mono',
-                        fontSize: 10,
-                        color: _kPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+                  if (_username.isNotEmpty)
+                    _MobileHeaderChip(label: _username, highlighted: true),
                 ],
               ),
         actions: _selectMode
@@ -604,14 +591,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: Center(
-                        child: Text(
-                          '$_totalCount ITEMS',
-                          style: TextStyle(
-                            fontFamily: 'Space Mono',
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
+                        child: _MobileHeaderChip(label: '$_totalCount items'),
                       ),
                     ),
                   IconButton(
@@ -951,18 +931,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     return RefreshIndicator(
       onRefresh: _loadFiles,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(8),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
         itemCount: itemCount,
         itemBuilder: (context, index) {
           if (index < visibleFolders.length) {
             final folder = visibleFolders[index];
-            return _FolderTile(
+            return _MobileFolderRow(
               key: ValueKey('folder:${folder.path}'),
               folder: folder,
               onTap: () => _openFolder(folder.path),
@@ -971,11 +946,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
           final file = visibleFiles[index - visibleFolders.length];
           final isSelected = _selected.contains(file.key);
-          return _FileTile(
+          return _MobileFileRow(
             key: ValueKey('file:${file.key}'),
             file: file,
             label: _labelForFile(file),
             apiService: widget.apiService,
+            size: _formatSize(file.size),
             selected: _selectMode ? isSelected : null,
             onTap: _selectMode
                 ? () => _toggleSelect(file)
@@ -1139,6 +1115,38 @@ class _FolderEntry {
   const _FolderEntry({required this.path, required this.count});
 
   String get name => path.split('/').last;
+}
+
+class _MobileHeaderChip extends StatelessWidget {
+  final String label;
+  final bool highlighted;
+
+  const _MobileHeaderChip({required this.label, this.highlighted = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: highlighted ? _kPrimary.withValues(alpha: 0.1) : _kSurfaceLow,
+        border: Border.all(color: highlighted ? _kPrimary : _kBorder),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 11,
+          height: 16 / 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.88,
+          color: highlighted ? _kPrimary : _kSecondary,
+        ),
+      ),
+    );
+  }
 }
 
 class _DesktopFilesSearchAndFilters extends StatelessWidget {
@@ -2401,244 +2409,146 @@ class _DesktopEmptyState extends StatelessWidget {
   }
 }
 
-class _FolderTile extends StatelessWidget {
+class _MobileFolderRow extends StatelessWidget {
   final _FolderEntry folder;
   final VoidCallback onTap;
 
-  const _FolderTile({super.key, required this.folder, required this.onTap});
+  const _MobileFolderRow({
+    super.key,
+    required this.folder,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFFF5F5F5),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.folder, size: 42, color: Colors.grey[500]),
-                const SizedBox(height: 8),
-                Text(
-                  folder.name,
-                  style: const TextStyle(
-                    fontFamily: 'Space Mono',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${folder.count} ITEMS',
-                  style: TextStyle(
-                    fontFamily: 'Space Mono',
-                    fontSize: 9,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-            ),
+    return Card(
+      elevation: 0,
+      color: _kCard,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: _kBorder),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        leading: const _ExplorerIcon(icon: Icons.folder, tint: _kPrimary),
+        title: Text(
+          folder.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: _kText,
           ),
         ),
+        subtitle: Text(
+          '${folder.count} items',
+          style: const TextStyle(
+            fontFamily: 'Geist',
+            fontSize: 12,
+            color: _kSecondary,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: _kSecondary),
       ),
     );
   }
 }
 
-class _FileTile extends StatefulWidget {
+class _MobileFileRow extends StatelessWidget {
   final FileItem file;
   final String label;
   final ApiService apiService;
-  final bool? selected; // null = not in select mode
+  final String size;
+  final bool? selected;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
-  const _FileTile({
+  const _MobileFileRow({
     super.key,
     required this.file,
     required this.label,
     required this.apiService,
-    this.selected,
+    required this.size,
+    required this.selected,
     required this.onTap,
-    this.onLongPress,
+    required this.onLongPress,
   });
 
   @override
-  State<_FileTile> createState() => _FileTileState();
-}
-
-class _FileTileState extends State<_FileTile> {
-  String? _thumbUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadThumbnail();
-  }
-
-  @override
-  void didUpdateWidget(covariant _FileTile oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.file.key != widget.file.key ||
-        oldWidget.file.thumbnailKey != widget.file.thumbnailKey) {
-      _loadThumbnail();
-    }
-  }
-
-  Future<void> _loadThumbnail() async {
-    final fileKey = widget.file.key;
-    final previewKey =
-        widget.file.thumbnailKey ?? (widget.file.isImage ? fileKey : null);
-    if (previewKey == null) {
-      if (mounted) setState(() => _thumbUrl = null);
-      return;
-    }
-
-    setState(() => _thumbUrl = null);
-    try {
-      final url = await widget.apiService.presignDownload(previewKey);
-      if (!mounted || widget.file.key != fileKey) return;
-      setState(() => _thumbUrl = url);
-    } catch (_) {}
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final isSelected = widget.selected == true;
-    final inSelectMode = widget.selected != null;
-
-    return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      child: ClipRRect(
+    final isSelected = selected == true;
+    final inSelectMode = selected != null;
+    return Card(
+      elevation: 0,
+      color: isSelected
+          ? const Color(0xFFFFDAD8).withValues(alpha: 0.32)
+          : _kCard,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          fit: StackFit.expand,
+        side: BorderSide(color: isSelected ? _kPrimary : _kBorder),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        leading: Stack(
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                border: Border.all(
-                  color: isSelected ? _kPrimary : const Color(0xFFE0E0E0),
-                  width: isSelected ? 2 : 1,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: _thumbUrl != null
-                  ? Image.network(
-                      _thumbUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _placeholder(),
-                    )
-                  : _placeholder(),
+            _DesktopFileThumbnail(
+              file: file,
+              apiService: apiService,
+              size: 42,
+              borderRadius: 8,
             ),
-            if (_thumbUrl != null) _labelOverlay(),
             if (inSelectMode)
               Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? _kPrimary
-                        : Colors.white.withValues(alpha: 0.8),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? _kPrimary : Colors.grey,
-                    ),
-                  ),
-                  child: isSelected
-                      ? const Icon(Icons.check, size: 16, color: Colors.white)
-                      : null,
+                right: -1,
+                bottom: -1,
+                child: Icon(
+                  isSelected
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: isSelected ? _kPrimary : _kSecondary,
                 ),
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _placeholder() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            _iconForContentType(widget.file.contentType),
-            size: 32,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                fontFamily: 'Space Mono',
-                fontSize: 9,
-                color: Colors.grey,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _labelOverlay() {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              Colors.black.withValues(alpha: 0.72),
-              Colors.black.withValues(alpha: 0.0),
-            ],
-          ),
-        ),
-        child: Text(
-          widget.label,
-          style: const TextStyle(
-            fontFamily: 'Space Mono',
-            fontSize: 9,
-            color: Colors.white,
-          ),
+        title: Text(
+          label,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          maxLines: 2,
-          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: _kText,
+          ),
         ),
+        subtitle: Text(
+          '$size - ${_displayType(file.contentType)}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontFamily: 'Geist',
+            fontSize: 12,
+            color: _kSecondary,
+          ),
+        ),
+        trailing: inSelectMode
+            ? null
+            : const Icon(Icons.chevron_right, color: _kSecondary),
       ),
     );
   }
 
-  IconData _iconForContentType(String contentType) {
-    if (contentType.startsWith('image/')) return Icons.image;
-    if (contentType.startsWith('video/')) return Icons.videocam;
-    if (contentType.startsWith('audio/')) return Icons.audiotrack;
-    if (contentType.contains('pdf')) return Icons.picture_as_pdf;
-    if (contentType.contains('zip') || contentType.contains('archive')) {
-      return Icons.archive;
-    }
-    return Icons.insert_drive_file;
+  String _displayType(String contentType) {
+    final slash = contentType.indexOf('/');
+    if (slash == -1) return contentType;
+    return contentType.substring(0, slash).toUpperCase();
   }
 }

@@ -58,11 +58,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (result == null) return;
 
     try {
-      await widget.apiService.createUser(
-        result.username,
-        result.password,
-        result.role,
-      );
+      await widget.apiService.createUser(result.username, result.password);
       _loadUsers();
     } catch (e) {
       if (!mounted) return;
@@ -534,7 +530,7 @@ class _UserCard extends StatelessWidget {
         PopupMenuButton<String>(
           onSelected: (action) {
             if (action == 'password' && !isAdmin) onChangePassword(username);
-            if (action == 'delete') onDeleteUser(username);
+            if (action == 'delete' && !isAdmin) onDeleteUser(username);
           },
           itemBuilder: (_) => [
             if (!isAdmin)
@@ -548,17 +544,18 @@ class _UserCard extends StatelessWidget {
                   ),
                 ),
               ),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Text(
-                'Delete',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w600,
-                  color: _kPrimary,
+            if (!isAdmin)
+              const PopupMenuItem(
+                value: 'delete',
+                child: Text(
+                  'Delete',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                    color: _kPrimary,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ],
@@ -634,12 +631,7 @@ class _EmptyUsersLabel extends StatelessWidget {
 class _CreateUserResult {
   final String username;
   final String password;
-  final String role;
-  _CreateUserResult({
-    required this.username,
-    required this.password,
-    required this.role,
-  });
+  _CreateUserResult({required this.username, required this.password});
 }
 
 class _CreateUserDialog extends StatefulWidget {
@@ -652,7 +644,6 @@ class _CreateUserDialog extends StatefulWidget {
 class _CreateUserDialogState extends State<_CreateUserDialog> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  String _role = 'user';
   bool _showPassword = false;
 
   @override
@@ -680,11 +671,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
             if (username.isEmpty || password.isEmpty) return;
             Navigator.pop(
               context,
-              _CreateUserResult(
-                username: username,
-                password: password,
-                role: _role,
-              ),
+              _CreateUserResult(username: username, password: password),
             );
           },
         ),
@@ -719,18 +706,6 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
                 ),
               ),
               obscureText: !_showPassword,
-            ),
-            const SizedBox(height: 24),
-            _ModalFieldLabel('Access Role'),
-            DropdownButtonFormField<String>(
-              initialValue: _role,
-              decoration: _modalInputDecoration(),
-              dropdownColor: _kCard,
-              items: const [
-                DropdownMenuItem(value: 'user', child: Text('Standard User')),
-                DropdownMenuItem(value: 'admin', child: Text('Admin')),
-              ],
-              onChanged: (v) => setState(() => _role = v ?? 'user'),
             ),
           ],
         ),

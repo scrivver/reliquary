@@ -441,13 +441,12 @@ func (ah *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "username and password are required", http.StatusBadRequest)
 		return
 	}
-
-	role := auth.RoleUser
 	if req.Role == "admin" {
-		role = auth.RoleAdmin
+		httpError(w, "admin users must be created during initialization or by command-line tooling", http.StatusForbidden)
+		return
 	}
 
-	if err := ah.users.Create(r.Context(), req.Username, req.Password, role); err != nil {
+	if err := ah.users.Create(r.Context(), req.Username, req.Password, auth.RoleUser); err != nil {
 		httpError(w, err.Error(), http.StatusConflict)
 		return
 	}
@@ -476,6 +475,20 @@ func (ah *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	username := r.PathValue("username")
 	if username == "" {
 		httpError(w, "username is required", http.StatusBadRequest)
+		return
+	}
+	caller := auth.UsernameFromContext(r.Context())
+	if username == caller {
+		httpError(w, "cannot delete your own account", http.StatusForbidden)
+		return
+	}
+	targetUser, ok := ah.users.Get(username)
+	if !ok {
+		httpError(w, fmt.Sprintf("user %q not found", username), http.StatusNotFound)
+		return
+	}
+	if targetUser.Role == auth.RoleAdmin {
+		httpError(w, "admin accounts cannot be deleted by another admin", http.StatusForbidden)
 		return
 	}
 	if err := ah.users.Delete(r.Context(), username); err != nil {

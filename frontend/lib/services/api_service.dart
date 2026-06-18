@@ -156,10 +156,10 @@ class ApiService {
   }
 
   /// Create a new user (admin only).
-  Future<void> createUser(String username, String password, String role) async {
+  Future<void> createUser(String username, String password) async {
     await _dio.post(
       '/api/admin/users',
-      data: {'username': username, 'password': password, 'role': role},
+      data: {'username': username, 'password': password},
     );
   }
 
