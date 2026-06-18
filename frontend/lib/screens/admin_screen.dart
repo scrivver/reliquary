@@ -5,6 +5,7 @@ import 'responsive_page.dart';
 
 const _kPrimary = Color(0xFFB7102A);
 const _kSurface = Color(0xFFF8F9FA);
+const _kSurfaceLow = Color(0xFFF3F4F5);
 const _kCard = Color(0xFFFFFFFF);
 const _kBorder = Color(0xFFE5E5E5);
 const _kText = Color(0xFF191C1D);
@@ -51,6 +52,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _createUser() async {
     final result = await showDialog<_CreateUserResult>(
       context: context,
+      barrierColor: _kText.withValues(alpha: 0.4),
       builder: (ctx) => const _CreateUserDialog(),
     );
     if (result == null) return;
@@ -133,6 +135,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _changePassword(String username) async {
     final password = await showDialog<String>(
       context: context,
+      barrierColor: _kText.withValues(alpha: 0.4),
       builder: (ctx) => _ChangePasswordDialog(username: username),
     );
     if (password == null) return;
@@ -558,31 +561,33 @@ class _UserCard extends StatelessWidget {
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          tooltip: 'Change password',
-          onPressed: () => onChangePassword(username),
-          icon: const Icon(Icons.edit_outlined, color: _kSecondary),
-          style: IconButton.styleFrom(
-            hoverColor: const Color(0xFFFFDAD8),
-            focusColor: const Color(0xFFFFDAD8),
+        if (!isAdmin)
+          IconButton(
+            tooltip: 'Change password',
+            onPressed: () => onChangePassword(username),
+            icon: const Icon(Icons.edit_outlined, color: _kSecondary),
+            style: IconButton.styleFrom(
+              hoverColor: const Color(0xFFFFDAD8),
+              focusColor: const Color(0xFFFFDAD8),
+            ),
           ),
-        ),
         PopupMenuButton<String>(
           onSelected: (action) {
-            if (action == 'password') onChangePassword(username);
+            if (action == 'password' && !isAdmin) onChangePassword(username);
             if (action == 'delete') onDeleteUser(username);
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'password',
-              child: Text(
-                'Change password',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w600,
+            if (!isAdmin)
+              const PopupMenuItem(
+                value: 'password',
+                child: Text(
+                  'Change password',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
             const PopupMenuItem(
               value: 'delete',
               child: Text(
@@ -688,6 +693,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   String _role = 'user';
+  bool _showPassword = false;
 
   @override
   void dispose() {
@@ -698,101 +704,77 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        'Create user',
-        style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _usernameController,
-            style: TextStyle(fontFamily: 'Geist', fontSize: 14),
-            decoration: InputDecoration(
-              labelText: 'Username',
-              labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
-              border: const OutlineInputBorder(),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kPrimary),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _passwordController,
-            style: TextStyle(fontFamily: 'Geist', fontSize: 14),
-            decoration: InputDecoration(
-              labelText: 'Password',
-              labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
-              border: const OutlineInputBorder(),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kPrimary),
-              ),
-            ),
-            obscureText: true,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _role,
-            decoration: InputDecoration(
-              labelText: 'Role',
-              labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
-              border: const OutlineInputBorder(),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kPrimary),
-              ),
-            ),
-            items: [
-              DropdownMenuItem(
-                value: 'user',
-                child: Text(
-                  'USER',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 14),
-                ),
-              ),
-              DropdownMenuItem(
-                value: 'admin',
-                child: Text(
-                  'ADMIN',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 14),
-                ),
-              ),
-            ],
-            onChanged: (v) => setState(() => _role = v ?? 'user'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Cancel',
-            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
-          ),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: _kPrimary),
-          onPressed: () {
-            if (_usernameController.text.isEmpty ||
-                _passwordController.text.isEmpty) {
-              return;
-            }
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      backgroundColor: Colors.transparent,
+      child: _ModalCard(
+        maxWidth: 520,
+        title: 'Add New User',
+        onClose: () => Navigator.pop(context),
+        footer: _ModalActions(
+          primaryLabel: 'Add User',
+          onCancel: () => Navigator.pop(context),
+          onPrimary: () {
+            final username = _usernameController.text.trim();
+            final password = _passwordController.text;
+            if (username.isEmpty || password.isEmpty) return;
             Navigator.pop(
               context,
               _CreateUserResult(
-                username: _usernameController.text,
-                password: _passwordController.text,
+                username: username,
+                password: password,
                 role: _role,
               ),
             );
           },
-          child: Text(
-            'Create',
-            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
-          ),
         ),
-      ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModalFieldLabel('Username'),
+            TextField(
+              controller: _usernameController,
+              autofocus: true,
+              style: const TextStyle(fontFamily: 'Inter', fontSize: 16),
+              decoration: _modalInputDecoration(
+                hintText: 'e.g. alexander.pierce',
+              ),
+            ),
+            const SizedBox(height: 24),
+            _ModalFieldLabel('Password'),
+            TextField(
+              controller: _passwordController,
+              style: const TextStyle(fontFamily: 'Inter', fontSize: 16),
+              decoration: _modalInputDecoration(
+                hintText: 'Enter password',
+                suffixIcon: IconButton(
+                  onPressed: () =>
+                      setState(() => _showPassword = !_showPassword),
+                  icon: Icon(
+                    _showPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: _kSecondary,
+                  ),
+                ),
+              ),
+              obscureText: !_showPassword,
+            ),
+            const SizedBox(height: 24),
+            _ModalFieldLabel('Access Role'),
+            DropdownButtonFormField<String>(
+              initialValue: _role,
+              decoration: _modalInputDecoration(),
+              dropdownColor: _kCard,
+              items: const [
+                DropdownMenuItem(value: 'user', child: Text('Standard User')),
+                DropdownMenuItem(value: 'admin', child: Text('Admin')),
+              ],
+              onChanged: (v) => setState(() => _role = v ?? 'user'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -806,57 +788,356 @@ class _ChangePasswordDialog extends StatefulWidget {
 }
 
 class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
-  final _controller = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _showPassword = false;
+  bool _showConfirm = false;
+  String? _error;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        'Change password: ${widget.username}',
-        style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
-      ),
-      content: TextField(
-        controller: _controller,
-        style: TextStyle(fontFamily: 'Geist', fontSize: 14),
-        decoration: InputDecoration(
-          labelText: 'New password',
-          labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
-          border: const OutlineInputBorder(),
-          focusedBorder: const OutlineInputBorder(
-            borderSide: BorderSide(color: _kPrimary),
-          ),
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      backgroundColor: Colors.transparent,
+      child: _ModalCard(
+        maxWidth: 440,
+        title: 'Change Password',
+        subtitle: 'Update password for ${widget.username}',
+        onClose: () => Navigator.pop(context),
+        footer: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: _kPrimary,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(54),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: _submit,
+              child: const Text(
+                'Update Password',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _kText,
+                minimumSize: const Size.fromHeight(48),
+                side: const BorderSide(color: _kBorder),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
-        obscureText: true,
-        autofocus: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ModalFieldLabel('New Password'),
+            TextField(
+              controller: _passwordController,
+              autofocus: true,
+              style: const TextStyle(fontFamily: 'Inter', fontSize: 16),
+              decoration: _modalInputDecoration(
+                hintText: 'Enter new password',
+                suffixIcon: IconButton(
+                  onPressed: () =>
+                      setState(() => _showPassword = !_showPassword),
+                  icon: Icon(
+                    _showPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: _kSecondary,
+                  ),
+                ),
+              ),
+              obscureText: !_showPassword,
+              onChanged: (_) => setState(() => _error = null),
+            ),
+            const SizedBox(height: 24),
+            _ModalFieldLabel('Confirm New Password'),
+            TextField(
+              controller: _confirmController,
+              style: const TextStyle(fontFamily: 'Inter', fontSize: 16),
+              decoration: _modalInputDecoration(
+                hintText: 'Confirm new password',
+                suffixIcon: IconButton(
+                  onPressed: () => setState(() => _showConfirm = !_showConfirm),
+                  icon: Icon(
+                    _showConfirm
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: _kSecondary,
+                  ),
+                ),
+              ),
+              obscureText: !_showConfirm,
+              onChanged: (_) => setState(() => _error = null),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _error ?? 'Use a strong temporary password for this account.',
+                style: TextStyle(
+                  fontFamily: 'Geist',
+                  fontSize: 12,
+                  height: 16 / 12,
+                  color: _error == null ? _kSecondary : _kPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: _passwordStrength,
+                minHeight: 4,
+                backgroundColor: _kSurfaceLow,
+                color: _kPrimary,
+              ),
+            ),
+          ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
+    );
+  }
+
+  double get _passwordStrength {
+    final length = _passwordController.text.length;
+    if (length == 0) return 0;
+    if (length < 6) return 0.33;
+    if (length < 10) return 0.66;
+    return 1;
+  }
+
+  void _submit() {
+    final password = _passwordController.text;
+    final confirm = _confirmController.text;
+    if (password.isEmpty || confirm.isEmpty) {
+      setState(() => _error = 'Enter and confirm the new password.');
+      return;
+    }
+    if (password != confirm) {
+      setState(() => _error = 'Passwords do not match.');
+      return;
+    }
+    Navigator.pop(context, password);
+  }
+}
+
+class _ModalCard extends StatelessWidget {
+  final double maxWidth;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onClose;
+  final Widget child;
+  final Widget footer;
+
+  const _ModalCard({
+    required this.maxWidth,
+    required this.title,
+    this.subtitle,
+    required this.onClose,
+    required this.child,
+    required this.footer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Material(
+        color: _kCard,
+        elevation: 16,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 24, 24, 20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 24,
+                            height: 32 / 24,
+                            fontWeight: FontWeight.w700,
+                            color: _kText,
+                          ),
+                        ),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            subtitle!,
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              height: 24 / 16,
+                              color: _kSecondary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onClose,
+                    icon: const Icon(Icons.close, color: _kSecondary),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: _kBorder),
+            Padding(padding: const EdgeInsets.all(32), child: child),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: _kSurfaceLow,
+                border: Border(top: BorderSide(color: _kBorder)),
+              ),
+              child: footer,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModalActions extends StatelessWidget {
+  final String primaryLabel;
+  final VoidCallback onCancel;
+  final VoidCallback onPrimary;
+
+  const _ModalActions({
+    required this.primaryLabel,
+    required this.onCancel,
+    required this.onPrimary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _kText,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            side: const BorderSide(color: _kBorder),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          onPressed: onCancel,
+          child: const Text(
             'Cancel',
             style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
           ),
         ),
+        const SizedBox(width: 12),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: _kPrimary),
-          onPressed: () {
-            if (_controller.text.isEmpty) return;
-            Navigator.pop(context, _controller.text);
-          },
+          style: FilledButton.styleFrom(
+            backgroundColor: _kPrimary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          onPressed: onPrimary,
           child: Text(
-            'Change',
-            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
+            primaryLabel,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
     );
   }
+}
+
+class _ModalFieldLabel extends StatelessWidget {
+  final String label;
+
+  const _ModalFieldLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 12,
+            height: 16 / 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.96,
+            color: _kSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+InputDecoration _modalInputDecoration({String? hintText, Widget? suffixIcon}) {
+  return InputDecoration(
+    hintText: hintText,
+    hintStyle: const TextStyle(color: _kSecondary),
+    filled: true,
+    fillColor: _kCard,
+    suffixIcon: suffixIcon,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: _kBorder),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: _kPrimary),
+    ),
+  );
 }
 
 class _RoleBadge extends StatelessWidget {
@@ -874,12 +1155,14 @@ class _RoleBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        isAdmin ? 'Admin' : 'User',
+        role.toUpperCase(),
         style: TextStyle(
           fontFamily: 'Inter',
           fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isAdmin ? Colors.white : const Color(0xFF636262),
+          height: 16 / 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.88,
+          color: isAdmin ? Colors.white : _kSecondary,
         ),
       ),
     );
