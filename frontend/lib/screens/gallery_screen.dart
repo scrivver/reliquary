@@ -30,6 +30,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String? _error;
   String _username = '';
   String _currentPath = '';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _searching = false;
   bool _selectMode = false;
   final Set<String> _selected = {};
 
@@ -40,6 +43,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
     super.initState();
     _loadUserInfo();
     _loadFiles();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserInfo() async {
@@ -429,6 +438,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   fontWeight: FontWeight.w700,
                 ),
               )
+            : _searching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Search artifacts...',
+                  border: InputBorder.none,
+                ),
+                style: const TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+                textInputAction: TextInputAction.search,
+                onChanged: (value) {
+                  setState(() => _searchQuery = value);
+                },
+              )
             : Row(
                 children: [
                   if (_currentPath.isNotEmpty)
@@ -493,20 +516,33 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
               ]
             : [
-                if (_totalCount > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Center(
-                      child: Text(
-                        '$_totalCount ITEMS',
-                        style: TextStyle(
-                          fontFamily: 'Space Mono',
-                          fontSize: 10,
-                          color: Colors.grey,
+                if (_searching)
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: _stopSearch,
+                    tooltip: 'CLEAR_SEARCH',
+                  )
+                else ...[
+                  if (_totalCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Center(
+                        child: Text(
+                          '$_totalCount ITEMS',
+                          style: TextStyle(
+                            fontFamily: 'Space Mono',
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
                         ),
                       ),
                     ),
+                  IconButton(
+                    icon: const Icon(Icons.search, size: 20),
+                    onPressed: _startSearch,
+                    tooltip: 'SEARCH',
                   ),
+                ],
                 if (visibleFiles.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.checklist, size: 20),
@@ -591,9 +627,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
             Icon(Icons.folder_open, size: 64, color: Colors.grey[300]),
             const SizedBox(height: 16),
             Text(
-              'FOLDER_EMPTY',
+              _searchQuery.trim().isEmpty ? 'FOLDER_EMPTY' : 'NO_MATCHES',
               style: TextStyle(fontFamily: 'Space Mono', color: Colors.grey),
             ),
+            if (_searchQuery.trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Try a different search term',
+                style: TextStyle(color: Colors.grey[500], fontSize: 13),
+              ),
+            ],
           ],
         ),
       );
@@ -613,6 +656,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           if (index < visibleFolders.length) {
             final folder = visibleFolders[index];
             return _FolderTile(
+              key: ValueKey('folder:${folder.path}'),
               folder: folder,
               onTap: () => _openFolder(folder.path),
             );
@@ -621,6 +665,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           final file = visibleFiles[index - visibleFolders.length];
           final isSelected = _selected.contains(file.key);
           return _FileTile(
+            key: ValueKey('file:${file.key}'),
             file: file,
             label: _labelForFile(file),
             apiService: widget.apiService,
@@ -641,6 +686,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   List<_FolderEntry> _visibleFolders() {
+    if (_isSearching) return [];
+
     final folders = <String, int>{};
     final prefix = _currentPath.isEmpty ? '' : '$_currentPath/';
 
@@ -664,6 +711,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   List<FileItem> _visibleFiles() {
+    if (_isSearching) {
+      final files = _files.where((file) {
+        return _matchesSearch(file, _searchQuery);
+      }).toList()..sort((a, b) => a.displayPath.compareTo(b.displayPath));
+      return files;
+    }
+
     final prefix = _currentPath.isEmpty ? '' : '$_currentPath/';
     final files = _files.where((file) {
       final path = file.displayPath;
@@ -674,10 +728,41 @@ class _GalleryScreenState extends State<GalleryScreen> {
   }
 
   String _labelForFile(FileItem file) {
+    if (_isSearching) return file.displayPath;
     if (_currentPath.isEmpty) return file.displayPath;
     final prefix = '$_currentPath/';
     if (!file.displayPath.startsWith(prefix)) return file.displayPath;
     return file.displayPath.substring(prefix.length);
+  }
+
+  bool get _isSearching => _searchQuery.trim().isNotEmpty;
+
+  bool _matchesSearch(FileItem file, String query) {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+
+    return file.displayPath.toLowerCase().contains(normalized) ||
+        file.filename.toLowerCase().contains(normalized) ||
+        file.contentType.toLowerCase().contains(normalized) ||
+        (file.originalName?.toLowerCase().contains(normalized) ?? false);
+  }
+
+  void _startSearch() {
+    setState(() {
+      _searching = true;
+      _selectMode = false;
+      _selected.clear();
+    });
+  }
+
+  void _stopSearch() {
+    setState(() {
+      _searching = false;
+      _searchQuery = '';
+      _searchController.clear();
+      _selectMode = false;
+      _selected.clear();
+    });
   }
 
   void _openFolder(String path) {
@@ -717,7 +802,7 @@ class _FolderTile extends StatelessWidget {
   final _FolderEntry folder;
   final VoidCallback onTap;
 
-  const _FolderTile({required this.folder, required this.onTap});
+  const _FolderTile({super.key, required this.folder, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -775,6 +860,7 @@ class _FileTile extends StatefulWidget {
   final VoidCallback? onLongPress;
 
   const _FileTile({
+    super.key,
     required this.file,
     required this.label,
     required this.apiService,
@@ -793,17 +879,30 @@ class _FileTileState extends State<_FileTile> {
   @override
   void initState() {
     super.initState();
-    if (widget.file.thumbnailKey != null) {
+    _loadThumbnail();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FileTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file.key != widget.file.key ||
+        oldWidget.file.thumbnailKey != widget.file.thumbnailKey) {
       _loadThumbnail();
     }
   }
 
   Future<void> _loadThumbnail() async {
+    final thumbnailKey = widget.file.thumbnailKey;
+    if (thumbnailKey == null) {
+      if (mounted) setState(() => _thumbUrl = null);
+      return;
+    }
+
+    setState(() => _thumbUrl = null);
     try {
-      final url = await widget.apiService.presignDownload(
-        widget.file.thumbnailKey!,
-      );
-      if (mounted) setState(() => _thumbUrl = url);
+      final url = await widget.apiService.presignDownload(thumbnailKey);
+      if (!mounted || widget.file.thumbnailKey != thumbnailKey) return;
+      setState(() => _thumbUrl = url);
     } catch (_) {}
   }
 
