@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import 'responsive_page.dart';
 
 const _kAccentRed = Color(0xFFEC3713);
 
@@ -161,104 +162,323 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = isDesktopWidth(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'USER_MANAGEMENT',
-          style: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-          ),
-        ),
-      ),
+      appBar: isDesktop
+          ? null
+          : AppBar(
+              title: Text(
+                'User Management',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _kAccentRed))
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: _users.length,
-              itemBuilder: (context, index) {
-                final user = _users[index];
-                final username = user['username'] as String;
-                final role = user['role'] as String;
-                return Card(
-                  elevation: 0,
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
+          : isDesktop
+          ? _buildDesktopUsers()
+          : _buildMobileUsers(),
+      floatingActionButton: isDesktop
+          ? null
+          : FloatingActionButton(
+              heroTag: 'add_user_fab',
+              backgroundColor: _kAccentRed,
+              onPressed: _createUser,
+              child: const Icon(Icons.person_add, color: Colors.white),
+            ),
+    );
+  }
+
+  Widget _buildMobileUsers() {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _users.length,
+      itemBuilder: (context, index) => _UserCard(
+        user: _users[index],
+        onChangePassword: _changePassword,
+        onDeleteUser: _deleteUser,
+      ),
+    );
+  }
+
+  Widget _buildDesktopUsers() {
+    final adminCount = _users.where((u) => u['role'] == 'admin').length;
+    final regularCount = _users.length - adminCount;
+
+    return SingleChildScrollView(
+      child: DesktopPageFrame(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'User Management',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 32,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Manage password-authenticated accounts and administrative access.',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                height: 1.45,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.64),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
+                onPressed: _createUser,
+                icon: const Icon(Icons.person_add, color: Colors.white),
+                label: const Text('Create user'),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: PageSectionCard(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: _users.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: _EmptyUsersLabel(),
+                          )
+                        : Column(
+                            children: [
+                              const _UsersTableHeader(),
+                              Divider(
+                                height: 1,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.outlineVariant,
+                              ),
+                              for (
+                                var index = 0;
+                                index < _users.length;
+                                index++
+                              )
+                                _UserCard(
+                                  user: _users[index],
+                                  dense: true,
+                                  showDivider: index != _users.length - 1,
+                                  onChangePassword: _changePassword,
+                                  onDeleteUser: _deleteUser,
+                                ),
+                            ],
+                          ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                  ),
-                  child: ListTile(
-                    leading: Icon(
-                      role == 'admin'
-                          ? Icons.admin_panel_settings
-                          : Icons.person,
-                      color: role == 'admin' ? _kAccentRed : null,
-                    ),
-                    title: Text(
-                      username,
-                      style: TextStyle(
-                        fontFamily: 'Space Mono',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'ROLE: ${role.toUpperCase()}',
-                      style: TextStyle(
-                        fontFamily: 'Space Mono',
-                        fontSize: 11,
-                        letterSpacing: 0.8,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (action) {
-                        if (action == 'password') _changePassword(username);
-                        if (action == 'delete') _deleteUser(username);
-                      },
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: 'password',
-                          child: Text(
-                            'CHANGE_PASSWORD',
-                            style: TextStyle(
-                              fontFamily: 'Space Grotesk',
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.8,
-                            ),
+                ),
+                const SizedBox(width: 24),
+                SizedBox(
+                  width: 280,
+                  child: PageSectionCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Overview',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Text(
-                            'DELETE',
-                            style: TextStyle(
-                              fontFamily: 'Space Grotesk',
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.8,
-                              color: _kAccentRed,
-                            ),
-                          ),
+                        const SizedBox(height: 20),
+                        _SummaryRow(
+                          label: 'Total users',
+                          value: '${_users.length}',
+                        ),
+                        _SummaryRow(label: 'Admins', value: '$adminCount'),
+                        _SummaryRow(
+                          label: 'Standard users',
+                          value: '$regularCount',
                         ),
                       ],
                     ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'add_user_fab',
-        backgroundColor: _kAccentRed,
-        onPressed: _createUser,
-        child: const Icon(Icons.person_add, color: Colors.white),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserCard extends StatelessWidget {
+  final Map<String, dynamic> user;
+  final bool dense;
+  final bool showDivider;
+  final void Function(String username) onChangePassword;
+  final void Function(String username) onDeleteUser;
+
+  const _UserCard({
+    required this.user,
+    required this.onChangePassword,
+    required this.onDeleteUser,
+    this.dense = false,
+    this.showDivider = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final username = user['username'] as String;
+    final role = user['role'] as String;
+    final tile = ListTile(
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: dense ? 24 : 16,
+        vertical: dense ? 6 : 0,
+      ),
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        child: Text(
+          username.isEmpty ? '?' : username.substring(0, 1).toUpperCase(),
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ),
+      title: Text(
+        username,
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(children: [_RoleBadge(role: role)]),
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (action) {
+          if (action == 'password') onChangePassword(username);
+          if (action == 'delete') onDeleteUser(username);
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'password',
+            child: Text(
+              'Change password',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          PopupMenuItem(
+            value: 'delete',
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+                color: _kAccentRed,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (dense) {
+      return Column(
+        children: [
+          tile,
+          if (showDivider)
+            Divider(
+              height: 1,
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+        ],
+      );
+    }
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(4),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: tile,
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _SummaryRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Geist',
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyUsersLabel extends StatelessWidget {
+  const _EmptyUsersLabel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'No users found',
+      style: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 12,
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
       ),
     );
   }
@@ -298,26 +518,18 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        'CREATE_USER',
-        style: TextStyle(
-          fontFamily: 'Space Grotesk',
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.0,
-        ),
+        'Create user',
+        style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _usernameController,
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+            style: TextStyle(fontFamily: 'Geist', fontSize: 14),
             decoration: InputDecoration(
-              labelText: 'USERNAME',
-              labelStyle: TextStyle(
-                fontFamily: 'Space Mono',
-                fontSize: 12,
-                letterSpacing: 1.0,
-              ),
+              labelText: 'Username',
+              labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
@@ -327,14 +539,10 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
           const SizedBox(height: 12),
           TextField(
             controller: _passwordController,
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+            style: TextStyle(fontFamily: 'Geist', fontSize: 14),
             decoration: InputDecoration(
-              labelText: 'PASSWORD',
-              labelStyle: TextStyle(
-                fontFamily: 'Space Mono',
-                fontSize: 12,
-                letterSpacing: 1.0,
-              ),
+              labelText: 'Password',
+              labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
@@ -346,12 +554,8 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
           DropdownButtonFormField<String>(
             initialValue: _role,
             decoration: InputDecoration(
-              labelText: 'ROLE',
-              labelStyle: TextStyle(
-                fontFamily: 'Space Mono',
-                fontSize: 12,
-                letterSpacing: 1.0,
-              ),
+              labelText: 'Role',
+              labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
                 borderSide: BorderSide(color: _kAccentRed),
@@ -362,14 +566,14 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
                 value: 'user',
                 child: Text(
                   'USER',
-                  style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 14),
                 ),
               ),
               DropdownMenuItem(
                 value: 'admin',
                 child: Text(
                   'ADMIN',
-                  style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 14),
                 ),
               ),
             ],
@@ -381,12 +585,8 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(
-            'CANCEL',
-            style: TextStyle(
-              fontFamily: 'Space Grotesk',
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-            ),
+            'Cancel',
+            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
           ),
         ),
         FilledButton(
@@ -406,12 +606,8 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
             );
           },
           child: Text(
-            'CREATE',
-            style: TextStyle(
-              fontFamily: 'Space Grotesk',
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-            ),
+            'Create',
+            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
           ),
         ),
       ],
@@ -440,23 +636,15 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        'CHANGE_PASSWORD: ${widget.username}',
-        style: TextStyle(
-          fontFamily: 'Space Grotesk',
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.0,
-        ),
+        'Change password: ${widget.username}',
+        style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
       ),
       content: TextField(
         controller: _controller,
-        style: TextStyle(fontFamily: 'Space Mono', fontSize: 14),
+        style: TextStyle(fontFamily: 'Geist', fontSize: 14),
         decoration: InputDecoration(
-          labelText: 'NEW_PASSWORD',
-          labelStyle: TextStyle(
-            fontFamily: 'Space Mono',
-            fontSize: 12,
-            letterSpacing: 1.0,
-          ),
+          labelText: 'New password',
+          labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
           border: const OutlineInputBorder(),
           focusedBorder: const OutlineInputBorder(
             borderSide: BorderSide(color: _kAccentRed),
@@ -469,12 +657,8 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: Text(
-            'CANCEL',
-            style: TextStyle(
-              fontFamily: 'Space Grotesk',
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-            ),
+            'Cancel',
+            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
           ),
         ),
         FilledButton(
@@ -484,15 +668,84 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             Navigator.pop(context, _controller.text);
           },
           child: Text(
-            'CHANGE',
-            style: TextStyle(
-              fontFamily: 'Space Grotesk',
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-            ),
+            'Change',
+            style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UsersTableHeader extends StatelessWidget {
+  const _UsersTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Account',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.96,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+          Text(
+            'Actions',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.96,
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoleBadge extends StatelessWidget {
+  final String role;
+
+  const _RoleBadge({required this.role});
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = role == 'admin';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isAdmin
+            ? _kAccentRed.withValues(alpha: 0.08)
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        isAdmin ? 'Admin' : 'User',
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isAdmin
+              ? _kAccentRed
+              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
+        ),
+      ),
     );
   }
 }

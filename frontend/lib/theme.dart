@@ -1,80 +1,77 @@
 import 'package:flutter/material.dart';
 
 class ReliquaryTheme {
-  static const Color primary = Color(0xFFEC3713);
-  static const Color surface = Color(0xFFFAFAFA);
-  static const Color background = Color(0xFFFFFFFF);
-  static const Color cardBg = Color(0xFFF5F5F5);
-  static const Color border = Color(0xFFE0E0E0);
-  static const Color textPrimary = Color(0xFF1A1A1A);
-  static const Color textSecondary = Color(0xFF757575);
-  static const Color darkSurface = Color(0xFF2A2A2A);
+  static const Color primary = Color(0xFFE63946);
+  static const Color surface = Color(0xFFF8F9FA);
+  static const Color background = Color(0xFFF8F9FA);
+  static const Color cardBg = Color(0xFFFFFFFF);
+  static const Color border = Color(0xFFE5E5E5);
+  static const Color textPrimary = Color(0xFF191C1D);
+  static const Color textSecondary = Color(0xFF6F7478);
+  static const Color darkSurface = Color(0xFF1A1A1A);
 
   static ThemeData get light {
     final base = ThemeData.light(useMaterial3: true);
     final textTheme = base.textTheme
-        .apply(fontFamily: 'Space Grotesk')
+        .apply(fontFamily: 'Inter')
         .copyWith(
           headlineLarge: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
+            fontFamily: 'Inter',
+            fontSize: 32,
+            fontWeight: FontWeight.w600,
             color: textPrimary,
-            letterSpacing: -0.5,
+            letterSpacing: 0.1,
           ),
           headlineMedium: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
+            fontFamily: 'Inter',
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
             color: textPrimary,
           ),
           headlineSmall: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontSize: 18,
+            fontFamily: 'Inter',
+            fontSize: 20,
             fontWeight: FontWeight.w600,
             color: textPrimary,
           ),
           titleLarge: TextStyle(
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Inter',
             fontSize: 16,
             fontWeight: FontWeight.w600,
             color: textPrimary,
-            letterSpacing: 0.5,
           ),
           titleMedium: TextStyle(
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Inter',
             fontSize: 14,
             fontWeight: FontWeight.w600,
             color: textPrimary,
-            letterSpacing: 1.0,
+            letterSpacing: 0.24,
           ),
           bodyLarge: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontSize: 14,
+            fontFamily: 'Inter',
+            fontSize: 16,
             color: textPrimary,
           ),
           bodyMedium: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontSize: 13,
+            fontFamily: 'Inter',
+            fontSize: 14,
             color: textSecondary,
           ),
           bodySmall: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontSize: 11,
+            fontFamily: 'Inter',
+            fontSize: 12,
             color: textSecondary,
-            letterSpacing: 0.5,
           ),
           labelLarge: TextStyle(
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Inter',
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.2,
+            letterSpacing: 0.96,
           ),
           labelSmall: TextStyle(
-            fontFamily: 'Space Mono',
-            fontSize: 10,
+            fontFamily: 'Geist',
+            fontSize: 12,
             color: textSecondary,
-            letterSpacing: 0.8,
           ),
         );
 
@@ -93,11 +90,10 @@ class ReliquaryTheme {
         elevation: 0,
         scrolledUnderElevation: 1,
         titleTextStyle: TextStyle(
-          fontFamily: 'Space Grotesk',
+          fontFamily: 'Inter',
           fontSize: 16,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
           color: textPrimary,
-          letterSpacing: 1.0,
         ),
       ),
       cardTheme: CardThemeData(
@@ -114,9 +110,8 @@ class ReliquaryTheme {
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: TextStyle(
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Inter',
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
           ),
         ),
       ),
@@ -126,9 +121,8 @@ class ReliquaryTheme {
           side: const BorderSide(color: border),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: TextStyle(
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Inter',
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
           ),
         ),
       ),
@@ -143,12 +137,11 @@ class ReliquaryTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: primary, width: 2),
+          borderSide: const BorderSide(color: primary, width: 1),
         ),
         labelStyle: TextStyle(
-          fontFamily: 'Space Grotesk',
+          fontFamily: 'Inter',
           fontSize: 12,
-          letterSpacing: 1.0,
           color: textSecondary,
         ),
         contentPadding: const EdgeInsets.symmetric(
@@ -161,10 +154,9 @@ class ReliquaryTheme {
         indicatorColor: primary.withValues(alpha: 0.1),
         labelTextStyle: WidgetStatePropertyAll(
           TextStyle(
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Inter',
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
           ),
         ),
       ),

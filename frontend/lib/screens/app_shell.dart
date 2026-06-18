@@ -85,22 +85,44 @@ class _AppShellState extends State<AppShell> {
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-              labelType: NavigationRailLabelType.all,
-              leading: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: _VaultLogo(),
-              ),
-              destinations: [
-                for (final item in items)
-                  NavigationRailDestination(
-                    icon: Icon(item.icon),
-                    selectedIcon: Icon(item.selectedIcon),
-                    label: Text(item.label),
+            Container(
+              width: 260,
+              color: const Color(0xFF1A1A1A),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          _VaultLogo(),
+                          SizedBox(width: 12),
+                          Text(
+                            'Reliquary',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Inter',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      for (var i = 0; i < items.length; i++) ...[
+                        _DesktopNavItem(
+                          item: items[i],
+                          selected: i == _selectedIndex,
+                          onTap: () => setState(() => _selectedIndex = i),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      const Spacer(),
+                    ],
                   ),
-              ],
+                ),
+              ),
             ),
             const VerticalDivider(thickness: 1, width: 1),
             Expanded(
@@ -140,6 +162,84 @@ class _NavItem {
     required this.selectedIcon,
     required this.label,
   });
+}
+
+class _DesktopNavItem extends StatelessWidget {
+  final _NavItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DesktopNavItem({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFFE63946) : Colors.white70;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFE63946).withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 3,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? const Color(0xFFE63946)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                selected ? item.selectedIcon : item.icon,
+                color: color,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _displayLabel(item.label),
+                style: TextStyle(
+                  color: color,
+                  fontFamily: 'Inter',
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _displayLabel(String label) {
+    switch (label) {
+      case 'FILES':
+        return 'Files';
+      case 'STATUS':
+        return 'Vault status';
+      case 'USERS':
+        return 'Users';
+      case 'CONFIG':
+        return 'Config';
+      default:
+        return label;
+    }
+  }
 }
 
 class _VaultLogo extends StatelessWidget {
