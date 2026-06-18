@@ -61,6 +61,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String _searchQuery = '';
   bool _searching = false;
   bool _selectMode = false;
+  bool _desktopGridView = true;
   final Set<String> _selected = {};
   FileItem? _detailFile;
 
@@ -701,6 +702,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 onDownload: _selected.isEmpty ? null : _downloadSelected,
                 onDelete: _selected.isEmpty ? null : _deleteSelected,
                 onClearSelection: _exitSelectMode,
+                gridView: _desktopGridView,
+                onToggleView: () =>
+                    setState(() => _desktopGridView = !_desktopGridView),
               ),
               const SizedBox(height: 16),
               Row(
@@ -767,6 +771,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
       );
     }
 
+    if (_desktopGridView) {
+      return _buildDesktopGrid(visibleFolders, visibleFiles);
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: _kCard,
@@ -803,6 +811,58 @@ class _GalleryScreenState extends State<GalleryScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDesktopGrid(
+    List<_FolderEntry> visibleFolders,
+    List<FileItem> visibleFiles,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final crossAxisCount = width >= 1180
+            ? 4
+            : width >= 880
+            ? 3
+            : 2;
+
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 24,
+          mainAxisSpacing: 24,
+          childAspectRatio: 1.08,
+          children: [
+            for (final folder in visibleFolders)
+              _DesktopFolderCard(
+                folder: folder,
+                onTap: () => _openFolder(folder.path),
+              ),
+            for (final file in visibleFiles)
+              _DesktopFileCard(
+                file: file,
+                label: _labelForFile(file),
+                size: _formatSize(file.size),
+                apiService: widget.apiService,
+                selected: _selectMode ? _selected.contains(file.key) : null,
+                highlighted: !_selectMode && _detailFile?.key == file.key,
+                onTap: _selectMode
+                    ? () => _toggleSelect(file)
+                    : () => _openFile(file),
+                onLongPress: _selectMode
+                    ? null
+                    : () {
+                        setState(() => _selectMode = true);
+                        _toggleSelect(file);
+                      },
+                onDownload: () => _downloadFile(file),
+                onDelete: () => _deleteFile(file),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -1117,6 +1177,8 @@ class _DesktopFilesControls extends StatelessWidget {
   final VoidCallback? onDownload;
   final VoidCallback? onDelete;
   final VoidCallback onClearSelection;
+  final bool gridView;
+  final VoidCallback onToggleView;
 
   const _DesktopFilesControls({
     required this.selectMode,
@@ -1127,6 +1189,8 @@ class _DesktopFilesControls extends StatelessWidget {
     required this.onDownload,
     required this.onDelete,
     required this.onClearSelection,
+    required this.gridView,
+    required this.onToggleView,
   });
 
   @override
@@ -1164,15 +1228,10 @@ class _DesktopFilesControls extends StatelessWidget {
       children: [
         const Spacer(),
         _IconActionButton(
-          icon: Icons.grid_view,
-          label: 'Grid view',
-          onPressed: () {},
-        ),
-        _IconActionButton(
-          icon: Icons.view_list,
-          label: 'List view',
+          icon: gridView ? Icons.view_list : Icons.grid_view,
+          label: gridView ? 'List view' : 'Grid view',
           color: _kPrimary,
-          onPressed: () {},
+          onPressed: onToggleView,
         ),
         _IconActionButton(
           icon: Icons.checklist,
@@ -1406,6 +1465,217 @@ class _DesktopFileRow extends StatelessWidget {
   }
 }
 
+class _DesktopFolderCard extends StatelessWidget {
+  final _FolderEntry folder;
+  final VoidCallback onTap;
+
+  const _DesktopFolderCard({required this.folder, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _kCard,
+            border: Border.all(color: _kBorder),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: _kSurfaceLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.folder, size: 54, color: _kPrimary),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                folder.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 15,
+                  height: 20 / 15,
+                  fontWeight: FontWeight.w600,
+                  color: _kText,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${folder.count} items',
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 13,
+                  height: 18 / 13,
+                  color: _kSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopFileCard extends StatelessWidget {
+  final FileItem file;
+  final String label;
+  final String size;
+  final ApiService apiService;
+  final bool? selected;
+  final bool highlighted;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  final VoidCallback onDownload;
+  final VoidCallback onDelete;
+
+  const _DesktopFileCard({
+    required this.file,
+    required this.label,
+    required this.size,
+    required this.apiService,
+    required this.selected,
+    this.highlighted = false,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onDownload,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selected == true;
+    final inSelectMode = selected != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _kCard,
+            border: Border.all(
+              color: isSelected || highlighted ? _kPrimary : _kBorder,
+              width: isSelected || highlighted ? 1.5 : 1,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _DesktopFilePreview(
+                        file: file,
+                        apiService: apiService,
+                        height: null,
+                      ),
+                    ),
+                    if (inSelectMode)
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: Icon(
+                          isSelected
+                              ? Icons.check_circle
+                              : Icons.radio_button_unchecked,
+                          size: 22,
+                          color: isSelected ? _kPrimary : _kSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 15,
+                            height: 20 / 15,
+                            fontWeight: FontWeight.w600,
+                            color: _kText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$size - ${_formatDate(file.lastModified)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            height: 18 / 13,
+                            color: _kSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    padding: EdgeInsets.zero,
+                    icon: const Icon(Icons.more_vert, color: _kSecondary),
+                    onSelected: (action) {
+                      if (action == 'details') onTap();
+                      if (action == 'download') onDownload();
+                      if (action == 'delete') onDelete();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'details', child: Text('Details')),
+                      PopupMenuItem(value: 'download', child: Text('Download')),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: _kPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime value) {
+    final local = value.toLocal();
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
+    return '${local.year}-$month-$day';
+  }
+}
+
 class _DesktopExplorerRow extends StatelessWidget {
   final Widget leading;
   final String title;
@@ -1582,8 +1852,13 @@ class _DesktopFileThumbnailState extends State<_DesktopFileThumbnail> {
 class _DesktopFilePreview extends StatefulWidget {
   final FileItem file;
   final ApiService apiService;
+  final double? height;
 
-  const _DesktopFilePreview({required this.file, required this.apiService});
+  const _DesktopFilePreview({
+    required this.file,
+    required this.apiService,
+    this.height = 180,
+  });
 
   @override
   State<_DesktopFilePreview> createState() => _DesktopFilePreviewState();
@@ -1634,7 +1909,7 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        height: 180,
+        height: widget.height,
         decoration: BoxDecoration(
           color: _kSurfaceLow,
           border: Border.all(color: _kBorder),

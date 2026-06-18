@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../main.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'admin_screen.dart';
@@ -34,6 +35,16 @@ class _AppShellState extends State<AppShell> {
 
   void _onUnauthorized() {
     // Handled by main.dart navigatorKey
+  }
+
+  Future<void> _logout() async {
+    await widget.authService.logout();
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    nav.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthGate()),
+      (_) => false,
+    );
   }
 
   Future<void> _loadRole() async {
@@ -126,7 +137,10 @@ class _AppShellState extends State<AppShell> {
                         const SizedBox(height: 8),
                       ],
                       const Spacer(),
-                      _SidebarUserButton(username: _username),
+                      _SidebarUserButton(
+                        username: _username,
+                        onLogout: _logout,
+                      ),
                     ],
                   ),
                 ),
@@ -252,57 +266,71 @@ class _DesktopNavItem extends StatelessWidget {
 
 class _SidebarUserButton extends StatelessWidget {
   final String username;
+  final VoidCallback onLogout;
 
-  const _SidebarUserButton({required this.username});
+  const _SidebarUserButton({required this.username, required this.onLogout});
 
   @override
   Widget build(BuildContext context) {
     final initial = username.isEmpty ? '?' : username[0].toUpperCase();
-    return Tooltip(
-      message: username.isEmpty ? 'Account' : username,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.white12),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Center(
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontFamily: 'Inter',
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.white12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24),
             ),
-            const SizedBox(width: 10),
-            Expanded(
+            child: Center(
               child: Text(
-                username.isEmpty ? 'Account' : username,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                initial,
                 style: const TextStyle(
-                  color: Colors.white70,
+                  color: Colors.white,
                   fontFamily: 'Inter',
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              username.isEmpty ? 'Account' : username,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontFamily: 'Inter',
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout, size: 18),
+            color: Colors.white70,
+            style: IconButton.styleFrom(
+              fixedSize: const Size(34, 34),
+              minimumSize: const Size(34, 34),
+              padding: EdgeInsets.zero,
+              backgroundColor: Colors.white.withValues(alpha: 0.06),
+              hoverColor: Colors.white.withValues(alpha: 0.1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
