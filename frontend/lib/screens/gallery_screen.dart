@@ -18,6 +18,24 @@ const _kText = Color(0xFF191C1D);
 const _kSecondary = Color(0xFF5F5E5E);
 const _kSurfaceLow = Color(0xFFF3F4F5);
 
+IconData _iconForContentType(String contentType) {
+  if (contentType.startsWith('image/')) return Icons.image_outlined;
+  if (contentType.startsWith('video/')) return Icons.videocam_outlined;
+  if (contentType.startsWith('audio/')) return Icons.audiotrack_outlined;
+  if (contentType.contains('pdf')) return Icons.picture_as_pdf_outlined;
+  if (contentType.contains('zip') || contentType.contains('archive')) {
+    return Icons.archive_outlined;
+  }
+  return Icons.insert_drive_file_outlined;
+}
+
+Color _tintForContentType(String contentType) {
+  if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
+    return const Color(0xFF006860);
+  }
+  return _kPrimary;
+}
+
 class GalleryScreen extends StatefulWidget {
   final AuthService authService;
   final ApiService apiService;
@@ -440,6 +458,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
             _DesktopDetailsDrawer(
               file: _detailFile,
               size: _detailFile == null ? null : _formatSize(_detailFile!.size),
+              apiService: widget.apiService,
               onClose: () => setState(() => _detailFile = null),
               onDownload: _detailFile == null
                   ? null
@@ -767,6 +786,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               file: file,
               label: _labelForFile(file),
               size: _formatSize(file.size),
+              apiService: widget.apiService,
               selected: _selectMode ? _selected.contains(file.key) : null,
               highlighted: !_selectMode && _detailFile?.key == file.key,
               onTap: _selectMode
@@ -1290,6 +1310,7 @@ class _DesktopFileRow extends StatelessWidget {
   final FileItem file;
   final String label;
   final String size;
+  final ApiService apiService;
   final bool? selected;
   final bool highlighted;
   final VoidCallback onTap;
@@ -1301,6 +1322,7 @@ class _DesktopFileRow extends StatelessWidget {
     required this.file,
     required this.label,
     required this.size,
+    required this.apiService,
     required this.selected,
     this.highlighted = false,
     required this.onTap,
@@ -1319,9 +1341,11 @@ class _DesktopFileRow extends StatelessWidget {
       selected: isSelected || highlighted,
       leading: Stack(
         children: [
-          _ExplorerIcon(
-            icon: _iconForContentType(file.contentType),
-            tint: _tintForContentType(file.contentType),
+          _DesktopFileThumbnail(
+            file: file,
+            apiService: apiService,
+            size: 40,
+            borderRadius: 8,
           ),
           if (inSelectMode)
             Positioned(
@@ -1366,24 +1390,6 @@ class _DesktopFileRow extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  IconData _iconForContentType(String contentType) {
-    if (contentType.startsWith('image/')) return Icons.image_outlined;
-    if (contentType.startsWith('video/')) return Icons.videocam_outlined;
-    if (contentType.startsWith('audio/')) return Icons.audiotrack_outlined;
-    if (contentType.contains('pdf')) return Icons.picture_as_pdf_outlined;
-    if (contentType.contains('zip') || contentType.contains('archive')) {
-      return Icons.archive_outlined;
-    }
-    return Icons.insert_drive_file_outlined;
-  }
-
-  Color _tintForContentType(String contentType) {
-    if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
-      return const Color(0xFF006860);
-    }
-    return _kPrimary;
   }
 
   String _displayType(String contentType) {
@@ -1485,6 +1491,179 @@ class _DesktopExplorerRow extends StatelessWidget {
   }
 }
 
+class _DesktopFileThumbnail extends StatefulWidget {
+  final FileItem file;
+  final ApiService apiService;
+  final double size;
+  final double borderRadius;
+
+  const _DesktopFileThumbnail({
+    required this.file,
+    required this.apiService,
+    required this.size,
+    required this.borderRadius,
+  });
+
+  @override
+  State<_DesktopFileThumbnail> createState() => _DesktopFileThumbnailState();
+}
+
+class _DesktopFileThumbnailState extends State<_DesktopFileThumbnail> {
+  String? _url;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreview();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopFileThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file.key != widget.file.key ||
+        oldWidget.file.thumbnailKey != widget.file.thumbnailKey) {
+      _loadPreview();
+    }
+  }
+
+  Future<void> _loadPreview() async {
+    final fileKey = widget.file.key;
+    final previewKey =
+        widget.file.thumbnailKey ?? (widget.file.isImage ? fileKey : null);
+    if (previewKey == null) {
+      if (mounted) setState(() => _url = null);
+      return;
+    }
+
+    setState(() => _url = null);
+    try {
+      final url = await widget.apiService.presignDownload(previewKey);
+      if (!mounted || widget.file.key != fileKey) return;
+      setState(() => _url = url);
+    } catch (_) {
+      if (mounted && widget.file.key == fileKey) {
+        setState(() => _url = null);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = _tintForContentType(widget.file.contentType);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(widget.borderRadius),
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+        ),
+        child: _url == null
+            ? Icon(
+                _iconForContentType(widget.file.contentType),
+                color: tint,
+                size: widget.size * 0.55,
+              )
+            : Image.network(
+                _url!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Icon(
+                  _iconForContentType(widget.file.contentType),
+                  color: tint,
+                  size: widget.size * 0.55,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _DesktopFilePreview extends StatefulWidget {
+  final FileItem file;
+  final ApiService apiService;
+
+  const _DesktopFilePreview({required this.file, required this.apiService});
+
+  @override
+  State<_DesktopFilePreview> createState() => _DesktopFilePreviewState();
+}
+
+class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
+  String? _url;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreview();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopFilePreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file.key != widget.file.key ||
+        oldWidget.file.thumbnailKey != widget.file.thumbnailKey) {
+      _loadPreview();
+    }
+  }
+
+  Future<void> _loadPreview() async {
+    final fileKey = widget.file.key;
+    final previewKey =
+        widget.file.thumbnailKey ?? (widget.file.isImage ? fileKey : null);
+    if (previewKey == null) {
+      if (mounted) setState(() => _url = null);
+      return;
+    }
+
+    setState(() => _url = null);
+    try {
+      final url = await widget.apiService.presignDownload(previewKey);
+      if (!mounted || widget.file.key != fileKey) return;
+      setState(() => _url = url);
+    } catch (_) {
+      if (mounted && widget.file.key == fileKey) {
+        setState(() => _url = null);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = _tintForContentType(widget.file.contentType);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 180,
+        decoration: BoxDecoration(
+          color: _kSurfaceLow,
+          border: Border.all(color: _kBorder),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: _url == null
+            ? Center(
+                child: Icon(
+                  _iconForContentType(widget.file.contentType),
+                  size: 54,
+                  color: tint,
+                ),
+              )
+            : Image.network(
+                _url!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Center(
+                  child: Icon(
+                    _iconForContentType(widget.file.contentType),
+                    size: 54,
+                    color: tint,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
 class _ExplorerIcon extends StatelessWidget {
   final IconData icon;
   final Color tint;
@@ -1529,6 +1708,7 @@ class _MetaText extends StatelessWidget {
 class _DesktopDetailsDrawer extends StatelessWidget {
   final FileItem? file;
   final String? size;
+  final ApiService apiService;
   final VoidCallback onClose;
   final VoidCallback? onDownload;
   final VoidCallback? onDelete;
@@ -1536,6 +1716,7 @@ class _DesktopDetailsDrawer extends StatelessWidget {
   const _DesktopDetailsDrawer({
     required this.file,
     required this.size,
+    required this.apiService,
     required this.onClose,
     required this.onDownload,
     required this.onDelete,
@@ -1567,6 +1748,7 @@ class _DesktopDetailsDrawer extends StatelessWidget {
                     : _DesktopDetailsContent(
                         file: selectedFile,
                         size: size ?? '',
+                        apiService: apiService,
                         onClose: onClose,
                         onDownload: onDownload,
                         onDelete: onDelete,
@@ -1583,6 +1765,7 @@ class _DesktopDetailsDrawer extends StatelessWidget {
 class _DesktopDetailsContent extends StatelessWidget {
   final FileItem file;
   final String size;
+  final ApiService apiService;
   final VoidCallback onClose;
   final VoidCallback? onDownload;
   final VoidCallback? onDelete;
@@ -1590,6 +1773,7 @@ class _DesktopDetailsContent extends StatelessWidget {
   const _DesktopDetailsContent({
     required this.file,
     required this.size,
+    required this.apiService,
     required this.onClose,
     required this.onDownload,
     required this.onDelete,
@@ -1636,21 +1820,7 @@ class _DesktopDetailsContent extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    height: 180,
-                    decoration: BoxDecoration(
-                      color: _kSurfaceLow,
-                      border: Border.all(color: _kBorder),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        _iconForContentType(file.contentType),
-                        size: 54,
-                        color: _tintForContentType(file.contentType),
-                      ),
-                    ),
-                  ),
+                  _DesktopFilePreview(file: file, apiService: apiService),
                   const SizedBox(height: 20),
                   Text(
                     file.filename,
@@ -1737,24 +1907,6 @@ class _DesktopDetailsContent extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  IconData _iconForContentType(String contentType) {
-    if (contentType.startsWith('image/')) return Icons.image_outlined;
-    if (contentType.startsWith('video/')) return Icons.videocam_outlined;
-    if (contentType.startsWith('audio/')) return Icons.audiotrack_outlined;
-    if (contentType.contains('pdf')) return Icons.picture_as_pdf_outlined;
-    if (contentType.contains('zip') || contentType.contains('archive')) {
-      return Icons.archive_outlined;
-    }
-    return Icons.insert_drive_file_outlined;
-  }
-
-  Color _tintForContentType(String contentType) {
-    if (contentType.startsWith('video/') || contentType.startsWith('audio/')) {
-      return const Color(0xFF006860);
-    }
-    return _kPrimary;
   }
 
   String _displayType(String contentType) {
@@ -1961,16 +2113,18 @@ class _FileTileState extends State<_FileTile> {
   }
 
   Future<void> _loadThumbnail() async {
-    final thumbnailKey = widget.file.thumbnailKey;
-    if (thumbnailKey == null) {
+    final fileKey = widget.file.key;
+    final previewKey =
+        widget.file.thumbnailKey ?? (widget.file.isImage ? fileKey : null);
+    if (previewKey == null) {
       if (mounted) setState(() => _thumbUrl = null);
       return;
     }
 
     setState(() => _thumbUrl = null);
     try {
-      final url = await widget.apiService.presignDownload(thumbnailKey);
-      if (!mounted || widget.file.thumbnailKey != thumbnailKey) return;
+      final url = await widget.apiService.presignDownload(previewKey);
+      if (!mounted || widget.file.key != fileKey) return;
       setState(() => _thumbUrl = url);
     } catch (_) {}
   }
