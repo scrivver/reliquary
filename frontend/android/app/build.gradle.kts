@@ -28,6 +28,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        resValue("string", "app_name", "Reliquary")
         manifestPlaceholders.putAll(
             mapOf(
                 "appAuthRedirectScheme" to "com.reliquary.app",
