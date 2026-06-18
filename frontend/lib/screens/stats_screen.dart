@@ -164,32 +164,10 @@ class _StatsScreenState extends State<StatsScreen> {
             Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Vault Status',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 48,
-                          height: 56 / 48,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.96,
-                          color: _kText,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
+                  child: DesktopPageHeader(
+                    title: 'Vault Status',
+                    subtitle:
                         'Comprehensive health and distribution report for the primary archive.',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 16,
-                          height: 24 / 16,
-                          letterSpacing: 0.16,
-                          color: _kSecondary,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
                 const SizedBox(width: 24),

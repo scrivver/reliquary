@@ -247,32 +247,10 @@ class _AdminScreenState extends State<AdminScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Member Directory',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 32,
-                          height: 40 / 32,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.32,
-                          color: _kText,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
+                  child: DesktopPageHeader(
+                    title: 'Member Directory',
+                    subtitle:
                         'Manage access permissions and administrative roles for the Reliquary vault.',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 16,
-                          height: 24 / 16,
-                          letterSpacing: 0.16,
-                          color: _kSecondary,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
                 const SizedBox(width: 24),

@@ -246,27 +246,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'SYSTEM_CONFIG',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 32,
-                height: 40 / 32,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.32,
-                color: _kText,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Manage connection and account security settings for this Reliquary session.',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 16,
-                height: 24 / 16,
-                letterSpacing: 0.16,
-                color: _kSecondary,
-              ),
+            const DesktopPageHeader(
+              title: 'System Config',
+              subtitle:
+                  'Manage connection and account security settings for this Reliquary session.',
             ),
             const SizedBox(height: 48),
             Column(
