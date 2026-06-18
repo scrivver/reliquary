@@ -6,7 +6,13 @@ import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'responsive_page.dart';
 
-const _kAccentRed = Color(0xFFEC3713);
+const _kPrimary = Color(0xFFB7102A);
+const _kSurface = Color(0xFFF8F9FA);
+const _kCard = Color(0xFFFFFFFF);
+const _kBorder = Color(0xFFE5E5E5);
+const _kText = Color(0xFF191C1D);
+const _kSecondary = Color(0xFF5F5E5E);
+const _kMutedSurface = Color(0xFFEDEEEF);
 
 class SettingsScreen extends StatefulWidget {
   final ApiService? apiService;
@@ -22,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _urlController;
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   String? _username;
   String? _provider;
 
@@ -48,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _urlController.dispose();
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -62,7 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(
           'Server URL saved. Restart the app to apply.',
-          style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          style: TextStyle(fontFamily: 'Inter', fontSize: 13),
         ),
       ),
     );
@@ -77,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(
           'Reset to default. Restart the app to apply.',
-          style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          style: TextStyle(fontFamily: 'Inter', fontSize: 13),
         ),
       ),
     );
@@ -85,32 +93,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _changePassword() async {
     if (_username == null || widget.apiService == null) return;
+    final currentPassword = _currentPasswordController.text.trim();
     final newPassword = _newPasswordController.text.trim();
-    if (newPassword.isEmpty) return;
+    final confirmPassword = _confirmPasswordController.text.trim();
+    if (currentPassword.isEmpty ||
+        newPassword.isEmpty ||
+        confirmPassword.isEmpty) {
+      _showSnackBar('Enter current password, new password, and confirmation.');
+      return;
+    }
+    if (newPassword != confirmPassword) {
+      _showSnackBar('New password and confirmation do not match.');
+      return;
+    }
 
     try {
       await widget.apiService!.changePassword(_username!, newPassword);
       if (!mounted) return;
+      _currentPasswordController.clear();
       _newPasswordController.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Password changed successfully',
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
-          ),
-        ),
-      );
+      _confirmPasswordController.clear();
+      _showSnackBar('Password changed successfully');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Failed to change password: $e',
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
-          ),
-        ),
-      );
+      _showSnackBar('Failed to change password: $e');
     }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamily: 'Inter', fontSize: 13),
+        ),
+      ),
+    );
   }
 
   @override
@@ -129,24 +148,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
+      backgroundColor: _kSurface,
       body: isDesktop ? _buildDesktopBody() : _buildMobileBody(),
     );
   }
 
   Widget _buildMobileBody() {
+    final canChangePassword =
+        _username != null &&
+        _provider == 'password' &&
+        widget.apiService != null;
+    final hasSettings = !isWebBuild || canChangePassword;
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        if (!isWebBuild) ..._serverUrlFields(),
+        if (!isWebBuild)
+          _ConfigPanel(
+            icon: Icons.dns_outlined,
+            title: 'Server Endpoint',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _serverUrlFields(),
+            ),
+          ),
 
         // Change password section
-        if (_username != null &&
-            _provider == 'password' &&
-            widget.apiService != null) ...[
-          if (!isWebBuild) const SizedBox(height: 32),
-          Divider(color: Theme.of(context).colorScheme.outlineVariant),
-          const SizedBox(height: 16),
-          ..._changePasswordFields(),
+        if (canChangePassword) ...[
+          if (!isWebBuild) const SizedBox(height: 16),
+          _ConfigPanel(
+            icon: Icons.lock_reset,
+            title: 'Security Credentials',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _changePasswordFields(),
+            ),
+          ),
+        ],
+        if (!hasSettings) ...[
+          if (!isWebBuild) const SizedBox(height: 16),
+          const _ConfigPanel(
+            icon: Icons.info_outline,
+            title: 'Current Session',
+            child: _NoSettingsLabel(),
+          ),
         ],
       ],
     );
@@ -155,23 +200,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDesktopBody() {
     final sections = <Widget>[];
 
-    if (!isWebBuild) {
-      sections.add(
-        PageSectionCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _serverUrlFields(),
-          ),
-        ),
-      );
-    }
-
     if (_username != null &&
         _provider == 'password' &&
         widget.apiService != null) {
-      if (sections.isNotEmpty) sections.add(const SizedBox(height: 16));
       sections.add(
-        PageSectionCard(
+        _ConfigPanel(
+          icon: Icons.lock_reset,
+          title: 'Security Credentials',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: _changePasswordFields(),
@@ -180,79 +215,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     }
 
+    if (!isWebBuild) {
+      if (sections.isNotEmpty) sections.add(const SizedBox(height: 24));
+      sections.add(
+        _ConfigPanel(
+          icon: Icons.dns_outlined,
+          title: 'Server Endpoint',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _serverUrlFields(),
+          ),
+        ),
+      );
+    }
+
+    if (sections.isEmpty) {
+      sections.add(
+        const _ConfigPanel(
+          icon: Icons.info_outline,
+          title: 'Current Session',
+          child: _NoSettingsLabel(),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       child: DesktopPageFrame(
+        maxWidth: 1440,
+        padding: const EdgeInsets.fromLTRB(40, 40, 40, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'System Config',
+            const Text(
+              'SYSTEM_CONFIG',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 32,
+                height: 40 / 32,
                 fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurface,
+                letterSpacing: 0.32,
+                color: _kText,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Connection and account settings for the current desktop session.',
+            const Text(
+              'Manage connection and account security settings for this Reliquary session.',
               style: TextStyle(
                 fontFamily: 'Inter',
-                fontSize: 14,
-                height: 1.45,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.64),
+                fontSize: 16,
+                height: 24 / 16,
+                letterSpacing: 0.16,
+                color: _kSecondary,
               ),
             ),
-            const SizedBox(height: 32),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: kDesktopFormMaxWidth,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: sections.isEmpty
-                        ? [const PageSectionCard(child: _NoSettingsLabel())]
-                        : sections,
-                  ),
-                ),
-                const SizedBox(width: 24),
-                SizedBox(
-                  width: 280,
-                  child: PageSectionCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Current session',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _ConfigInfoRow(label: 'User', value: _username ?? '-'),
-                        _ConfigInfoRow(
-                          label: 'Provider',
-                          value: _provider ?? '-',
-                        ),
-                        if (!isWebBuild)
-                          _ConfigInfoRow(
-                            label: 'Server',
-                            value: _urlController.text,
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 48),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: sections,
             ),
           ],
         ),
@@ -262,53 +281,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<Widget> _serverUrlFields() {
     return [
-      _buildSectionHeader('Server URL'),
-      const SizedBox(height: 12),
+      const _ConfigFieldLabel('Server URL'),
+      const SizedBox(height: 8),
       TextField(
         controller: _urlController,
-        style: TextStyle(fontFamily: 'Geist', fontSize: 14),
-        decoration: InputDecoration(
-          border: const OutlineInputBorder(),
-          focusedBorder: const OutlineInputBorder(
-            borderSide: BorderSide(color: _kAccentRed),
-          ),
-          hintText: 'http://192.168.1.100:2080',
-          hintStyle: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 14,
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.3),
-          ),
-        ),
+        style: const TextStyle(fontFamily: 'Geist', fontSize: 14),
+        decoration: _inputDecoration(hintText: 'http://192.168.1.100:2080'),
         keyboardType: TextInputType.url,
         onSubmitted: (_) => _save(),
       ),
       const SizedBox(height: 16),
-      Row(
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          Expanded(
-            child: FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
-              onPressed: _save,
-              child: Text(
-                'SAVE',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w600,
-                ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: _kPrimary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            onPressed: _save,
+            child: const Text(
+              'SAVE',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          const SizedBox(width: 8),
           OutlinedButton(
             style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: _kAccentRed),
-              foregroundColor: _kAccentRed,
+              side: const BorderSide(color: _kText),
+              foregroundColor: _kText,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: _reset,
-            child: Text(
-              'Reset',
+            child: const Text(
+              'RESET',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w600,
@@ -317,15 +333,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-      const SizedBox(height: 8),
-      Text(
-        'Change the server URL to connect to a different Reliquary instance '
-        '(e.g., a portable drive on your local network).',
+      const SizedBox(height: 12),
+      const Text(
+        'Change the server URL to connect to a different Reliquary instance.',
         style: TextStyle(
           fontFamily: 'Inter',
-          fontSize: 13,
-          height: 1.45,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+          fontSize: 14,
+          height: 20 / 14,
+          color: _kSecondary,
         ),
       ),
     ];
@@ -333,97 +348,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   List<Widget> _changePasswordFields() {
     return [
-      _buildSectionHeader('Change Password'),
-      const SizedBox(height: 12),
+      const _ConfigFieldLabel('Current Password'),
+      const SizedBox(height: 8),
       TextField(
-        controller: _newPasswordController,
-        style: TextStyle(fontFamily: 'Geist', fontSize: 14),
-        decoration: InputDecoration(
-          labelText: 'New password',
-          labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
-          border: const OutlineInputBorder(),
-          focusedBorder: const OutlineInputBorder(
-            borderSide: BorderSide(color: _kAccentRed),
-          ),
-        ),
+        controller: _currentPasswordController,
+        style: const TextStyle(fontFamily: 'Geist', fontSize: 14),
+        decoration: _inputDecoration(hintText: 'Enter current password'),
         obscureText: true,
-        onSubmitted: (_) => _changePassword(),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 24),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final fields = [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _ConfigFieldLabel('New Password'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _newPasswordController,
+                  style: const TextStyle(fontFamily: 'Geist', fontSize: 14),
+                  decoration: _inputDecoration(hintText: 'Enter new password'),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Use a strong password for this account.',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    height: 20 / 14,
+                    color: _kSecondary,
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _ConfigFieldLabel('Confirm New Password'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _confirmPasswordController,
+                  style: const TextStyle(fontFamily: 'Geist', fontSize: 14),
+                  decoration: _inputDecoration(hintText: 'Verify new password'),
+                  obscureText: true,
+                  onSubmitted: (_) => _changePassword(),
+                ),
+              ],
+            ),
+          ];
+
+          if (constraints.maxWidth < 720) {
+            return Column(
+              children: [fields[0], const SizedBox(height: 16), fields[1]],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: fields[0]),
+              const SizedBox(width: 24),
+              Expanded(child: fields[1]),
+            ],
+          );
+        },
+      ),
+      const SizedBox(height: 24),
+      const Text(
+        'The current password is required before a new credential is accepted.',
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 14,
+          height: 20 / 14,
+          color: _kSecondary,
+        ),
+      ),
+      const SizedBox(height: 24),
+      Container(height: 1, color: _kBorder),
+      const SizedBox(height: 24),
       FilledButton(
-        style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
+        style: FilledButton.styleFrom(
+          backgroundColor: _kPrimary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
         onPressed: _changePassword,
-        child: Text(
-          'Change password',
+        child: const Text(
+          'CHANGE PASSWORD',
           style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
         ),
       ),
     ];
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Row(
-      children: [
-        Container(width: 3, height: 16, color: _kAccentRed),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.96,
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ConfigInfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _ConfigInfoRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 78,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'Geist',
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ],
+  InputDecoration _inputDecoration({String? hintText}) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: const TextStyle(
+        fontFamily: 'Geist',
+        fontSize: 14,
+        color: _kSecondary,
+      ),
+      filled: true,
+      fillColor: _kSurface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _kBorder),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _kBorder),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _kPrimary),
       ),
     );
   }
@@ -440,6 +482,90 @@ class _NoSettingsLabel extends StatelessWidget {
         fontFamily: 'Inter',
         fontSize: 12,
         color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+      ),
+    );
+  }
+}
+
+class _ConfigPanel extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  const _ConfigPanel({
+    required this.icon,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: _kCard,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 32,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  color: _kMutedSurface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: _kPrimary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 20,
+                  height: 28 / 20,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.2,
+                  color: _kText,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _ConfigFieldLabel extends StatelessWidget {
+  final String text;
+
+  const _ConfigFieldLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 12,
+        height: 16 / 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.96,
+        color: _kSecondary,
       ),
     );
   }
