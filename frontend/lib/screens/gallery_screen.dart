@@ -36,6 +36,20 @@ Color _tintForContentType(String contentType) {
   return _kPrimary;
 }
 
+enum _FilesSort {
+  nameAsc('Name A-Z'),
+  nameDesc('Name Z-A'),
+  newest('Newest'),
+  oldest('Oldest'),
+  largest('Largest'),
+  smallest('Smallest'),
+  type('Type');
+
+  final String label;
+
+  const _FilesSort(this.label);
+}
+
 class GalleryScreen extends StatefulWidget {
   final AuthService authService;
   final ApiService apiService;
@@ -62,6 +76,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
   bool _searching = false;
   bool _selectMode = false;
   bool _desktopGridView = true;
+  _FilesSort _sort = _FilesSort.nameAsc;
   final Set<String> _selected = {};
   FileItem? _detailFile;
 
@@ -705,6 +720,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 gridView: _desktopGridView,
                 onToggleView: () =>
                     setState(() => _desktopGridView = !_desktopGridView),
+                sort: _sort,
+                onSortChanged: (sort) => setState(() => _sort = sort),
               ),
               const SizedBox(height: 16),
               Row(
@@ -996,7 +1013,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
         folders.entries
             .map((entry) => _FolderEntry(path: entry.key, count: entry.value))
             .toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
+          ..sort(_compareFolders);
     return entries;
   }
 
@@ -1004,7 +1021,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (_isSearching) {
       final files = _files.where((file) {
         return _matchesSearch(file, _searchQuery);
-      }).toList()..sort((a, b) => a.displayPath.compareTo(b.displayPath));
+      }).toList()..sort(_compareFiles);
       return files;
     }
 
@@ -1013,8 +1030,42 @@ class _GalleryScreenState extends State<GalleryScreen> {
       final path = file.displayPath;
       if (!path.startsWith(prefix)) return false;
       return !path.substring(prefix.length).contains('/');
-    }).toList()..sort((a, b) => a.displayPath.compareTo(b.displayPath));
+    }).toList()..sort(_compareFiles);
     return files;
+  }
+
+  int _compareFolders(_FolderEntry a, _FolderEntry b) {
+    final result = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    return _sort == _FilesSort.nameDesc ? -result : result;
+  }
+
+  int _compareFiles(FileItem a, FileItem b) {
+    int result;
+    switch (_sort) {
+      case _FilesSort.nameAsc:
+        result = _labelForFile(
+          a,
+        ).toLowerCase().compareTo(_labelForFile(b).toLowerCase());
+      case _FilesSort.nameDesc:
+        result = _labelForFile(
+          b,
+        ).toLowerCase().compareTo(_labelForFile(a).toLowerCase());
+      case _FilesSort.newest:
+        result = b.lastModified.compareTo(a.lastModified);
+      case _FilesSort.oldest:
+        result = a.lastModified.compareTo(b.lastModified);
+      case _FilesSort.largest:
+        result = b.size.compareTo(a.size);
+      case _FilesSort.smallest:
+        result = a.size.compareTo(b.size);
+      case _FilesSort.type:
+        result = a.contentType.toLowerCase().compareTo(
+          b.contentType.toLowerCase(),
+        );
+    }
+
+    if (result != 0) return result;
+    return a.displayPath.toLowerCase().compareTo(b.displayPath.toLowerCase());
   }
 
   String _labelForFile(FileItem file) {
@@ -1179,6 +1230,8 @@ class _DesktopFilesControls extends StatelessWidget {
   final VoidCallback onClearSelection;
   final bool gridView;
   final VoidCallback onToggleView;
+  final _FilesSort sort;
+  final ValueChanged<_FilesSort> onSortChanged;
 
   const _DesktopFilesControls({
     required this.selectMode,
@@ -1191,6 +1244,8 @@ class _DesktopFilesControls extends StatelessWidget {
     required this.onClearSelection,
     required this.gridView,
     required this.onToggleView,
+    required this.sort,
+    required this.onSortChanged,
   });
 
   @override
@@ -1238,8 +1293,60 @@ class _DesktopFilesControls extends StatelessWidget {
           label: 'Select',
           onPressed: canSelect ? onSelect : null,
         ),
-        _IconActionButton(icon: Icons.sort, label: 'Sort', onPressed: () {}),
+        _SortMenuButton(sort: sort, onSortChanged: onSortChanged),
       ],
+    );
+  }
+}
+
+class _SortMenuButton extends StatelessWidget {
+  final _FilesSort sort;
+  final ValueChanged<_FilesSort> onSortChanged;
+
+  const _SortMenuButton({required this.sort, required this.onSortChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_FilesSort>(
+      tooltip: 'Sort',
+      initialValue: sort,
+      onSelected: onSortChanged,
+      itemBuilder: (_) => [
+        for (final option in _FilesSort.values)
+          PopupMenuItem(
+            value: option,
+            child: Row(
+              children: [
+                Icon(
+                  option == sort ? Icons.check : Icons.sort,
+                  size: 18,
+                  color: option == sort ? _kPrimary : _kSecondary,
+                ),
+                const SizedBox(width: 10),
+                Text(option.label),
+              ],
+            ),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sort, size: 20, color: _kPrimary),
+            const SizedBox(width: 6),
+            Text(
+              sort.label,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _kPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
