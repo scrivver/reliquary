@@ -3,7 +3,13 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import 'responsive_page.dart';
 
-const _kAccentRed = Color(0xFFEC3713);
+const _kPrimary = Color(0xFFB7102A);
+const _kSurface = Color(0xFFF8F9FA);
+const _kCard = Color(0xFFFFFFFF);
+const _kBorder = Color(0xFFE5E5E5);
+const _kText = Color(0xFF191C1D);
+const _kSecondary = Color(0xFF5F5E5E);
+const _kRoleSurface = Color(0xFFE2DFDE);
 
 class AdminScreen extends StatefulWidget {
   final ApiService apiService;
@@ -17,6 +23,7 @@ class AdminScreen extends StatefulWidget {
 class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _users = [];
   bool _loading = true;
+  String _query = '';
 
   @override
   void initState() {
@@ -61,7 +68,7 @@ class _AdminScreenState extends State<AdminScreen> {
         SnackBar(
           content: Text(
             'Failed to create user: $e',
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
         ),
       );
@@ -73,16 +80,12 @@ class _AdminScreenState extends State<AdminScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-          'DELETE_USER',
-          style: TextStyle(
-            fontFamily: 'Space Grotesk',
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.0,
-          ),
+          'Delete user',
+          style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600),
         ),
         content: Text(
           'Delete user "$username"? Their files will remain.',
-          style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+          style: TextStyle(fontFamily: 'Inter', fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -90,9 +93,8 @@ class _AdminScreenState extends State<AdminScreen> {
             child: Text(
               'CANCEL',
               style: TextStyle(
-                fontFamily: 'Space Grotesk',
+                fontFamily: 'Inter',
                 fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
               ),
             ),
           ),
@@ -101,10 +103,9 @@ class _AdminScreenState extends State<AdminScreen> {
             child: Text(
               'DELETE',
               style: TextStyle(
-                fontFamily: 'Space Grotesk',
+                fontFamily: 'Inter',
                 fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
-                color: _kAccentRed,
+                color: _kPrimary,
               ),
             ),
           ),
@@ -122,7 +123,7 @@ class _AdminScreenState extends State<AdminScreen> {
         SnackBar(
           content: Text(
             'Failed to delete user: $e',
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
         ),
       );
@@ -143,7 +144,7 @@ class _AdminScreenState extends State<AdminScreen> {
         SnackBar(
           content: Text(
             'Password changed',
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
         ),
       );
@@ -153,7 +154,7 @@ class _AdminScreenState extends State<AdminScreen> {
         SnackBar(
           content: Text(
             'Failed to change password: $e',
-            style: TextStyle(fontFamily: 'Space Mono', fontSize: 13),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 13),
           ),
         ),
       );
@@ -176,8 +177,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
             ),
+      backgroundColor: _kSurface,
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _kAccentRed))
+          ? const Center(child: CircularProgressIndicator(color: _kPrimary))
           : isDesktop
           ? _buildDesktopUsers()
           : _buildMobileUsers(),
@@ -185,7 +187,7 @@ class _AdminScreenState extends State<AdminScreen> {
           ? null
           : FloatingActionButton(
               heroTag: 'add_user_fab',
-              backgroundColor: _kAccentRed,
+              backgroundColor: _kPrimary,
               onPressed: _createUser,
               child: const Icon(Icons.person_add, color: Colors.white),
             ),
@@ -193,127 +195,128 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildMobileUsers() {
+    final users = _filteredUsers;
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _users.length,
-      itemBuilder: (context, index) => _UserCard(
-        user: _users[index],
-        onChangePassword: _changePassword,
-        onDeleteUser: _deleteUser,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+      itemCount: users.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: _DirectoryToolbar(
+              query: _query,
+              onQueryChanged: (value) => setState(() => _query = value),
+              compact: true,
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _UserCard(
+            user: users[index - 1],
+            onChangePassword: _changePassword,
+            onDeleteUser: _deleteUser,
+          ),
+        );
+      },
     );
   }
 
+  List<Map<String, dynamic>> get _filteredUsers {
+    final normalizedQuery = _query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return _users;
+    return _users.where((user) {
+      final username = (user['username'] as String?) ?? '';
+      final role = (user['role'] as String?) ?? '';
+      return username.toLowerCase().contains(normalizedQuery) ||
+          role.toLowerCase().contains(normalizedQuery);
+    }).toList();
+  }
+
   Widget _buildDesktopUsers() {
-    final adminCount = _users.where((u) => u['role'] == 'admin').length;
-    final regularCount = _users.length - adminCount;
+    final users = _filteredUsers;
 
     return SingleChildScrollView(
       child: DesktopPageFrame(
+        maxWidth: 1440,
+        padding: const EdgeInsets.fromLTRB(40, 40, 40, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'User Management',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 32,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Manage password-authenticated accounts and administrative access.',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                height: 1.45,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.64),
-              ),
-            ),
-            const SizedBox(height: 32),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
-                onPressed: _createUser,
-                icon: const Icon(Icons.person_add, color: Colors.white),
-                label: const Text('Create user'),
-              ),
-            ),
-            const SizedBox(height: 20),
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  flex: 3,
-                  child: PageSectionCard(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: _users.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(20),
-                            child: _EmptyUsersLabel(),
-                          )
-                        : Column(
-                            children: [
-                              const _UsersTableHeader(),
-                              Divider(
-                                height: 1,
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.outlineVariant,
-                              ),
-                              for (
-                                var index = 0;
-                                index < _users.length;
-                                index++
-                              )
-                                _UserCard(
-                                  user: _users[index],
-                                  dense: true,
-                                  showDivider: index != _users.length - 1,
-                                  onChangePassword: _changePassword,
-                                  onDeleteUser: _deleteUser,
-                                ),
-                            ],
-                          ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'Member Directory',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 32,
+                          height: 40 / 32,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.32,
+                          color: _kText,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Manage access permissions and administrative roles for the Reliquary vault.',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 16,
+                          height: 24 / 16,
+                          letterSpacing: 0.16,
+                          color: _kSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 24),
-                SizedBox(
-                  width: 280,
-                  child: PageSectionCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Overview',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        _SummaryRow(
-                          label: 'Total users',
-                          value: '${_users.length}',
-                        ),
-                        _SummaryRow(label: 'Admins', value: '$adminCount'),
-                        _SummaryRow(
-                          label: 'Standard users',
-                          value: '$regularCount',
-                        ),
-                      ],
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _kPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 18,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
+                  onPressed: _createUser,
+                  icon: const Icon(Icons.person_add, size: 20),
+                  label: const Text('ADD USER'),
                 ),
               ],
             ),
+            const SizedBox(height: 32),
+            _DirectoryToolbar(
+              query: _query,
+              onQueryChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: 24),
+            if (users.isEmpty)
+              const _DirectoryCard(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: _EmptyUsersLabel(),
+                ),
+              )
+            else
+              for (final user in users)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _UserCard(
+                    user: user,
+                    onChangePassword: _changePassword,
+                    onDeleteUser: _deleteUser,
+                  ),
+                ),
           ],
         ),
       ),
@@ -321,10 +324,148 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 }
 
+class _DirectoryToolbar extends StatefulWidget {
+  final String query;
+  final ValueChanged<String> onQueryChanged;
+  final bool compact;
+
+  const _DirectoryToolbar({
+    required this.query,
+    required this.onQueryChanged,
+    this.compact = false,
+  });
+
+  @override
+  State<_DirectoryToolbar> createState() => _DirectoryToolbarState();
+}
+
+class _DirectoryToolbarState extends State<_DirectoryToolbar> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.query);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DirectoryToolbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.query != _controller.text) {
+      _controller.value = TextEditingValue(
+        text: widget.query,
+        selection: TextSelection.collapsed(offset: widget.query.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final search = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: TextField(
+        controller: _controller,
+        onChanged: widget.onQueryChanged,
+        style: const TextStyle(fontFamily: 'Inter', fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search by name or role...',
+          prefixIcon: const Icon(Icons.search, color: _kSecondary, size: 20),
+          filled: true,
+          fillColor: _kCard,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 13,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: _kBorder),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: _kPrimary),
+          ),
+        ),
+      ),
+    );
+
+    final actions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: const [
+        _ToolbarButton(icon: Icons.filter_list, label: 'Filter'),
+        _ToolbarButton(icon: Icons.download_outlined, label: 'Export CSV'),
+      ],
+    );
+
+    if (widget.compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [search, const SizedBox(height: 12), actions],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: search),
+        const SizedBox(width: 16),
+        actions,
+      ],
+    );
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _ToolbarButton({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () {},
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _kSecondary,
+        side: const BorderSide(color: _kBorder),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: Icon(icon, size: 18),
+      label: Text(
+        label,
+        style: const TextStyle(fontFamily: 'Inter', fontSize: 14),
+      ),
+    );
+  }
+}
+
+class _DirectoryCard extends StatelessWidget {
+  final Widget child;
+
+  const _DirectoryCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _kCard,
+        border: Border.all(color: _kBorder),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: child,
+    );
+  }
+}
+
 class _UserCard extends StatelessWidget {
   final Map<String, dynamic> user;
-  final bool dense;
-  final bool showDivider;
   final void Function(String username) onChangePassword;
   final void Function(String username) onDeleteUser;
 
@@ -332,137 +473,187 @@ class _UserCard extends StatelessWidget {
     required this.user,
     required this.onChangePassword,
     required this.onDeleteUser,
-    this.dense = false,
-    this.showDivider = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final username = user['username'] as String;
     final role = user['role'] as String;
-    final tile = ListTile(
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: dense ? 24 : 16,
-        vertical: dense ? 6 : 0,
+    final isAdmin = role == 'admin';
+
+    final avatar = Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFFEDEEEF),
+        border: Border.all(color: isAdmin ? _kPrimary : _kBorder, width: 2),
+        boxShadow: isAdmin
+            ? [
+                BoxShadow(
+                  color: _kPrimary.withValues(alpha: 0.16),
+                  spreadRadius: 4,
+                ),
+              ]
+            : null,
       ),
-      leading: CircleAvatar(
-        radius: 18,
-        backgroundColor: Theme.of(
-          context,
-        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      child: Center(
         child: Text(
           username.isEmpty ? '?' : username.substring(0, 1).toUpperCase(),
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            color: _kText,
+          ),
+        ),
+      ),
+    );
+
+    final identity = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              username,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 20,
+                height: 28 / 20,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+                color: _kText,
+              ),
+            ),
+            _RoleBadge(role: role),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$username@reliquary.archive',
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            height: 20 / 14,
+            letterSpacing: 0.14,
+            color: _kSecondary,
+          ),
+        ),
+      ],
+    );
+
+    const activity = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          'LAST ACTIVITY',
           style: TextStyle(
             fontFamily: 'Inter',
-            fontSize: 13,
+            fontSize: 12,
+            height: 16 / 12,
             fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface,
+            letterSpacing: 0.96,
+            color: _kSecondary,
           ),
         ),
-      ),
-      title: Text(
-        username,
-        style: TextStyle(
-          fontFamily: 'Inter',
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+        SizedBox(height: 4),
+        Text(
+          'Account active',
+          textAlign: TextAlign.end,
+          style: TextStyle(
+            fontFamily: 'Geist',
+            fontSize: 12,
+            height: 16 / 12,
+            color: _kText,
+          ),
         ),
-      ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Row(children: [_RoleBadge(role: role)]),
-      ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (action) {
-          if (action == 'password') onChangePassword(username);
-          if (action == 'delete') onDeleteUser(username);
+      ],
+    );
+
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Change password',
+          onPressed: () => onChangePassword(username),
+          icon: const Icon(Icons.edit_outlined, color: _kSecondary),
+          style: IconButton.styleFrom(
+            hoverColor: const Color(0xFFFFDAD8),
+            focusColor: const Color(0xFFFFDAD8),
+          ),
+        ),
+        PopupMenuButton<String>(
+          onSelected: (action) {
+            if (action == 'password') onChangePassword(username);
+            if (action == 'delete') onDeleteUser(username);
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'password',
+              child: Text(
+                'Change password',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Text(
+                'Delete',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  color: _kPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    return _DirectoryCard(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 620) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    avatar,
+                    const SizedBox(width: 16),
+                    Expanded(child: identity),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [activity, actions],
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              avatar,
+              const SizedBox(width: 24),
+              Expanded(child: identity),
+              const SizedBox(width: 24),
+              activity,
+              const SizedBox(width: 24),
+              actions,
+            ],
+          );
         },
-        itemBuilder: (_) => [
-          PopupMenuItem(
-            value: 'password',
-            child: Text(
-              'Change password',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          PopupMenuItem(
-            value: 'delete',
-            child: Text(
-              'Delete',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontWeight: FontWeight.w600,
-                color: _kAccentRed,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (dense) {
-      return Column(
-        children: [
-          tile,
-          if (showDivider)
-            Divider(
-              height: 1,
-              color: Theme.of(context).colorScheme.outlineVariant,
-            ),
-        ],
-      );
-    }
-
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(4),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: tile,
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _SummaryRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontFamily: 'Geist',
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -532,7 +723,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
               labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kAccentRed),
+                borderSide: BorderSide(color: _kPrimary),
               ),
             ),
           ),
@@ -545,7 +736,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
               labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kAccentRed),
+                borderSide: BorderSide(color: _kPrimary),
               ),
             ),
             obscureText: true,
@@ -558,7 +749,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
               labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
               border: const OutlineInputBorder(),
               focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: _kAccentRed),
+                borderSide: BorderSide(color: _kPrimary),
               ),
             ),
             items: [
@@ -590,7 +781,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
           ),
         ),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
+          style: FilledButton.styleFrom(backgroundColor: _kPrimary),
           onPressed: () {
             if (_usernameController.text.isEmpty ||
                 _passwordController.text.isEmpty) {
@@ -647,7 +838,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           labelStyle: TextStyle(fontFamily: 'Inter', fontSize: 12),
           border: const OutlineInputBorder(),
           focusedBorder: const OutlineInputBorder(
-            borderSide: BorderSide(color: _kAccentRed),
+            borderSide: BorderSide(color: _kPrimary),
           ),
         ),
         obscureText: true,
@@ -662,7 +853,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           ),
         ),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: _kAccentRed),
+          style: FilledButton.styleFrom(backgroundColor: _kPrimary),
           onPressed: () {
             if (_controller.text.isEmpty) return;
             Navigator.pop(context, _controller.text);
@@ -673,48 +864,6 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _UsersTableHeader extends StatelessWidget {
-  const _UsersTableHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Account',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.96,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-          ),
-          Text(
-            'Actions',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.96,
-              color: Theme.of(
-                context,
-              ).colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
     );
   }
 }
@@ -730,9 +879,7 @@ class _RoleBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: isAdmin
-            ? _kAccentRed.withValues(alpha: 0.08)
-            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: isAdmin ? _kPrimary : _kRoleSurface,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -741,9 +888,7 @@ class _RoleBadge extends StatelessWidget {
           fontFamily: 'Inter',
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: isAdmin
-              ? _kAccentRed
-              : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
+          color: isAdmin ? Colors.white : const Color(0xFF636262),
         ),
       ),
     );
