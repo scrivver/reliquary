@@ -94,6 +94,7 @@ deployment.
 | `JWT_SECRET` | `api` | `change-me-in-production` | JWT signing secret; use a unique random value. |
 | `OIDC_ISSUER_URL` | `api` | — | OIDC issuer URL. |
 | `OIDC_CLIENT_ID` | `api` | — | Public OIDC client ID. |
+| `OIDC_REDIRECT_URI` | `api` | `com.reliquary.app://callback` | Native app redirect URI advertised to mobile clients; register this exact URI with the OIDC provider. |
 | `OIDC_USERNAME_CLAIM` | `api` | `preferred_username` | Userinfo claim used as Reliquary username. |
 | `EVENTS_ENABLED` | `api` | `true` | Enables explicit file-event publishing to RabbitMQ. |
 | `EVENT_QUEUE` | `api` | `engram.ingest` | RabbitMQ queue/routing key for file create/delete events. |

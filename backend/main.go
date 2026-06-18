@@ -227,6 +227,7 @@ type authOIDCConfig struct {
 	IssuerURL     string `json:"issuer_url,omitempty"`
 	ClientID      string `json:"client_id,omitempty"`
 	UsernameClaim string `json:"username_claim,omitempty"`
+	RedirectURI   string `json:"redirect_uri,omitempty"`
 }
 
 type authProxyConfig struct {
@@ -263,6 +264,7 @@ func authConfigHandler(cfg *config.Config) http.HandlerFunc {
 				IssuerURL:     cfg.OIDCIssuerURL,
 				ClientID:      cfg.OIDCClientID,
 				UsernameClaim: cfg.OIDCUsernameClaim,
+				RedirectURI:   cfg.OIDCRedirectURI,
 			},
 			Proxy: authProxyConfig{Enabled: cfg.ProxyAuthEnabled, Legacy: true},
 			None:  authNoneConfig{Enabled: cfg.NoAuthEnabled},

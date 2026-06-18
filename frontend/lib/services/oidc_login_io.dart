@@ -1,27 +1,41 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class OidcAuthorizationResult {
   final String code;
   final String redirectUri;
+  final String? codeVerifier;
 
   const OidcAuthorizationResult({
     required this.code,
     required this.redirectUri,
+    this.codeVerifier,
   });
 }
 
 Future<OidcAuthorizationResult?> startOidcAuthorization({
+  required String issuer,
   required Uri authorizationEndpoint,
   required String clientId,
+  required String redirectUri,
   required String scope,
   required String codeChallenge,
   required String state,
 }) async {
+  if (Platform.isAndroid) {
+    return _startAppAuthAuthorization(
+      issuer: issuer,
+      clientId: clientId,
+      redirectUri: redirectUri,
+      scope: scope,
+    );
+  }
+
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  final redirectUri = 'http://127.0.0.1:${server.port}/callback';
+  redirectUri = 'http://localhost:${server.port}/callback';
   final authUrl = authorizationEndpoint.replace(
     queryParameters: {
       'response_type': 'code',
@@ -61,6 +75,39 @@ Future<OidcAuthorizationResult?> startOidcAuthorization({
     return null;
   } finally {
     await server.close();
+  }
+}
+
+Future<OidcAuthorizationResult?> _startAppAuthAuthorization({
+  required String issuer,
+  required String clientId,
+  required String redirectUri,
+  required String scope,
+}) async {
+  try {
+    const appAuth = FlutterAppAuth();
+    final result = await appAuth.authorize(
+      AuthorizationRequest(
+        clientId,
+        redirectUri,
+        issuer: issuer,
+        scopes: scope.split(' '),
+        allowInsecureConnections: issuer.startsWith('http://'),
+      ),
+    );
+
+    final code = result.authorizationCode;
+    final codeVerifier = result.codeVerifier;
+    if (code == null || codeVerifier == null) {
+      return null;
+    }
+    return OidcAuthorizationResult(
+      code: code,
+      redirectUri: redirectUri,
+      codeVerifier: codeVerifier,
+    );
+  } catch (_) {
+    return null;
   }
 }
 

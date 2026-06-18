@@ -46,12 +46,14 @@ class OidcAuthConfig {
   final String issuerUrl;
   final String clientId;
   final String usernameClaim;
+  final String redirectUri;
 
   const OidcAuthConfig({
     required this.enabled,
     required this.issuerUrl,
     required this.clientId,
     required this.usernameClaim,
+    required this.redirectUri,
   });
 
   factory OidcAuthConfig.fromJson(Map<String, dynamic> json) {
@@ -61,6 +63,8 @@ class OidcAuthConfig {
       clientId: (json['client_id'] as String?) ?? '',
       usernameClaim:
           (json['username_claim'] as String?) ?? 'preferred_username',
+      redirectUri:
+          (json['redirect_uri'] as String?) ?? 'com.reliquary.app://callback',
     );
   }
 }

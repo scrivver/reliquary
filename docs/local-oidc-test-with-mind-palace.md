@@ -20,6 +20,7 @@ The root `bin/load-infra-env` exports:
 AUTH_MODE=oidc
 OIDC_ISSUER_URL="$AUTHENTIK_URL/application/o/mind-palace/"
 OIDC_CLIENT_ID=mind-palace
+OIDC_REDIRECT_URI=com.reliquary.app://callback
 RELIQUARY_URL="http://localhost:$PROXY_PORT/api/reliquary"
 ```
 
@@ -69,6 +70,13 @@ akadmin / mind-palace-admin
   `mind-palace`.
 - The web OIDC redirect URI is `/callback`, matching the local Authentik
   redirect regex for `http://localhost:.*/callback`.
+- Android OIDC testing uses the native app redirect URI advertised by Reliquary,
+  defaulting to `com.reliquary.app://callback`. Register this exact URI with
+  Authentik. The local Mind Palace dev setup includes it for newly created
+  providers.
+- Linux and macOS desktop OIDC testing still uses a temporary loopback redirect with the
+  `http://localhost:<port>/callback` form, matching the local Authentik
+  redirect regex.
 - Browser XHR for OIDC discovery and token exchange goes through Reliquary's
   same-origin `/api/auth/oidc/*` helper endpoints. The browser still navigates
   to Authentik for the login page, but it does not require Authentik to allow

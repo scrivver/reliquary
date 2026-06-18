@@ -90,8 +90,10 @@ class AuthService {
       await prefs.setString(_oidcClientIdKey, oidc.clientId);
 
       final result = await startOidcAuthorization(
+        issuer: oidc.issuerUrl,
         authorizationEndpoint: authorizationEndpoint,
         clientId: oidc.clientId,
+        redirectUri: oidc.redirectUri,
         scope: 'openid profile email offline_access',
         codeChallenge: codeChallenge,
         state: state,
@@ -106,7 +108,7 @@ class AuthService {
         clientId: oidc.clientId,
         code: result.code,
         redirectUri: result.redirectUri,
-        codeVerifier: codeVerifier,
+        codeVerifier: result.codeVerifier ?? codeVerifier,
       );
     } catch (_) {
       return false;

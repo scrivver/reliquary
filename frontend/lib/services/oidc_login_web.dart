@@ -8,21 +8,25 @@ import 'package:url_launcher/url_launcher.dart';
 class OidcAuthorizationResult {
   final String code;
   final String redirectUri;
+  final String? codeVerifier;
 
   const OidcAuthorizationResult({
     required this.code,
     required this.redirectUri,
+    this.codeVerifier,
   });
 }
 
 Future<OidcAuthorizationResult?> startOidcAuthorization({
+  required String issuer,
   required Uri authorizationEndpoint,
   required String clientId,
+  required String redirectUri,
   required String scope,
   required String codeChallenge,
   required String state,
 }) async {
-  final redirectUri = oidcRedirectUri();
+  redirectUri = oidcRedirectUri();
   final authUrl = authorizationEndpoint.replace(
     queryParameters: {
       'response_type': 'code',

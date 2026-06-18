@@ -91,6 +91,7 @@ AUTH_PROXY_ENABLED=false
 AUTH_NONE_ENABLED=false
 OIDC_ISSUER_URL=https://auth.example.com/application/o/reliquary/
 OIDC_CLIENT_ID=reliquary
+OIDC_REDIRECT_URI=com.reliquary.app://callback
 OIDC_USERNAME_CLAIM=preferred_username
 ```
 
@@ -297,4 +298,3 @@ Manual verification matrix:
 - Native/mobile build requires server URL before login.
 - Proxy-only backend is treated as legacy/advanced.
 - `none` mode enters the app without login.
-

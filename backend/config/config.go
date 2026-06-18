@@ -35,6 +35,7 @@ type Config struct {
 	OIDCIssuerURL     string // e.g. "http://localhost:9000/application/o/mind-palace/"
 	OIDCClientID      string // expected aud claim
 	OIDCUsernameClaim string // JWT claim for username (default: preferred_username)
+	OIDCRedirectURI   string // native app redirect URI (default: com.reliquary.app://callback)
 
 	// File events
 	EventsEnabled   bool
@@ -74,6 +75,7 @@ func Load() (*Config, error) {
 		OIDCIssuerURL:     envOr("OIDC_ISSUER_URL", ""),
 		OIDCClientID:      envOr("OIDC_CLIENT_ID", ""),
 		OIDCUsernameClaim: envOr("OIDC_USERNAME_CLAIM", "preferred_username"),
+		OIDCRedirectURI:   envOr("OIDC_REDIRECT_URI", "com.reliquary.app://callback"),
 
 		EventsEnabled:   envOrBool("EVENTS_ENABLED", true),
 		RabbitMQURL:     envOr("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672"),

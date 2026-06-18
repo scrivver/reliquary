@@ -142,6 +142,7 @@ Default credentials: `admin` / `admin` (configurable via `AUTH_USERNAME`, `AUTH_
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `OIDC_ISSUER_URL` | — | OIDC issuer URL when OIDC auth is enabled |
 | `OIDC_CLIENT_ID` | — | Public OIDC client ID used by the frontend |
+| `OIDC_REDIRECT_URI` | `com.reliquary.app://callback` | Native app redirect URI advertised to mobile clients; register this exact URI with the OIDC provider |
 | `OIDC_USERNAME_CLAIM` | `preferred_username` | Userinfo claim used as the Reliquary username |
 | `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Broker used for Engram file events |
 | `EVENT_QUEUE` | `engram.ingest` | Predeclared RabbitMQ queue/routing key |
@@ -293,6 +294,7 @@ Container configuration is provided through `.env` and consumed by
 | `JWT_SECRET` | `change-me-in-production` | JWT signing secret; must be unique in production |
 | `OIDC_ISSUER_URL` | — | OIDC issuer URL |
 | `OIDC_CLIENT_ID` | — | Public OIDC client ID |
+| `OIDC_REDIRECT_URI` | `com.reliquary.app://callback` | Native app redirect URI advertised to mobile clients; register this exact URI with the OIDC provider |
 | `OIDC_USERNAME_CLAIM` | `preferred_username` | Userinfo claim used as Reliquary username |
 | `EVENTS_ENABLED` | `true` | Publish explicit file events for downstream consumers |
 | `EVENT_QUEUE` | `engram.ingest` | RabbitMQ queue/routing key for file events |

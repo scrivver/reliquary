@@ -44,6 +44,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-com.reliquary.app://callback}
       OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
     volumes:
       - minio_data:/data/minio
