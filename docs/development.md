@@ -110,7 +110,7 @@ Or manually:
 
 ```bash
 cd frontend
-flutter run -d web-server
+flutter run -d web-server --web-port=3000 --dart-define=RELIQUARY_DEFAULT_API_BASE_URL=http://localhost:2080
 flutter run -d linux
 flutter run -d chrome
 ```

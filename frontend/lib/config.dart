@@ -28,8 +28,14 @@ class AppConfig {
   static Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefsKey);
-    hasSavedApiBaseUrl = saved != null && saved.isNotEmpty;
-    apiBaseUrl = saved ?? defaultApiBaseUrl;
+    final shouldIgnoreSavedDevOrigin =
+        saved != null &&
+        _configuredDefaultApiBaseUrl.isNotEmpty &&
+        saved == Uri.base.origin &&
+        saved != defaultApiBaseUrl;
+    hasSavedApiBaseUrl =
+        saved != null && saved.isNotEmpty && !shouldIgnoreSavedDevOrigin;
+    apiBaseUrl = hasSavedApiBaseUrl ? saved! : defaultApiBaseUrl;
   }
 
   /// Save a new API base URL.

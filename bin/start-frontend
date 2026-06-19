@@ -11,6 +11,6 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 tmux new-window -n frontend 2>/dev/null \
   || tmux new-session -d -s frontend -n frontend
 
-tmux send-keys -t frontend "cd $PROJECT_ROOT/frontend && flutter run -d web-server --web-port=3000" Enter
+tmux send-keys -t frontend "cd $PROJECT_ROOT/frontend && flutter run -d web-server --web-port=3000 --dart-define=RELIQUARY_DEFAULT_API_BASE_URL=http://localhost:2080" Enter
 
 echo "Frontend started in tmux window 'frontend'"
