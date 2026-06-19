@@ -33,6 +33,11 @@ is at least once.
 Thumbnail generation is non-critical background work. If thumbnail publication
 fails, the upload can still succeed with a warning.
 
+File listing is served from per-user manifests at
+`indexes/{username}/files.json`. Normal `GET /api/files` requests do not call
+object-storage `ListObjects`. If a manifest is missing, the API rebuilds it
+once from object storage and then serves future requests from the manifest.
+
 ## Admin User Lifecycle
 
 The web/API can create standard users only. Admin users are created during

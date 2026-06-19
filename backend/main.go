@@ -39,6 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("connected to MinIO", "endpoint", cfg.MinIOEndpoint, "bucket", cfg.MinIOBucket)
+	fileIndex := storage.NewFileIndex(store)
 
 	slog.Info(
 		"auth mode",
@@ -57,6 +58,7 @@ func main() {
 			slog.Error("failed to load user store", "error", err)
 			os.Exit(1)
 		}
+		seedInitialAdmin := len(users.List()) == 0
 		if err := users.Seed(context.Background(), cfg.Username, cfg.Password); err != nil {
 			slog.Error("failed to seed admin user", "error", err)
 			os.Exit(1)
@@ -65,6 +67,12 @@ func main() {
 		// Migrate legacy single-user files to admin namespace.
 		if err := storage.MigrateLegacyPrefix(context.Background(), store, cfg.Username); err != nil {
 			slog.Error("failed to migrate legacy files", "error", err)
+		}
+		if seedInitialAdmin {
+			if _, err := fileIndex.Rebuild(context.Background(), cfg.Username); err != nil {
+				slog.Error("failed to initialize admin file index", "user", cfg.Username, "error", err)
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -98,7 +106,7 @@ func main() {
 	defer thumbs.Close()
 	slog.Info("thumbnail job publisher ready", "queue", cfg.ThumbnailQueue)
 
-	h := handler.New(cfg, store, thumbs, checksums, events)
+	h := handler.New(cfg, store, fileIndex, thumbs, checksums, events)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -161,7 +169,7 @@ func main() {
 		})
 
 		if authSvc != nil {
-			adminH := handler.NewAdminHandler(users, store)
+			adminH := handler.NewAdminHandler(users, store, fileIndex)
 			// Admin endpoints (admin role required).
 			r.Group(func(r chi.Router) {
 				r.Use(authSvc.Middleware)

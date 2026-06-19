@@ -43,12 +43,6 @@ func (*fakeFileStore) GetObject(context.Context, string) (io.ReadCloser, error) 
 func (*fakeFileStore) DeleteObject(context.Context, string) error {
 	return nil
 }
-func (*fakeFileStore) ComputeUserStats(context.Context, string) (storage.UserStats, error) {
-	return storage.UserStats{}, nil
-}
-func (*fakeFileStore) ListObjects(context.Context, string) ([]minio.ObjectInfo, error) {
-	return nil, nil
-}
 
 type fakeEmitter struct {
 	events []event.FileEvent
@@ -102,6 +96,46 @@ func (i *fakeChecksumIndex) RemoveByKey(context.Context, string, string) error {
 	return nil
 }
 
+type fakeFileIndex struct {
+	manifest storage.FileManifest
+	err      error
+	rebuilds int
+	order    *[]string
+}
+
+func (i *fakeFileIndex) Ensure(context.Context, string) error {
+	return i.err
+}
+func (i *fakeFileIndex) Load(context.Context, string) (storage.FileManifest, error) {
+	if i.err != nil {
+		return storage.FileManifest{}, i.err
+	}
+	return i.manifest, nil
+}
+func (i *fakeFileIndex) Upsert(_ context.Context, _ string, item storage.FileIndexItem) error {
+	if i.order != nil {
+		*i.order = append(*i.order, "file-index:upsert")
+	}
+	i.manifest.Files = append(i.manifest.Files, item)
+	return i.err
+}
+func (i *fakeFileIndex) Remove(context.Context, string, string) error {
+	if i.order != nil {
+		*i.order = append(*i.order, "file-index:remove")
+	}
+	return i.err
+}
+func (i *fakeFileIndex) DeleteUser(context.Context, string) error {
+	return i.err
+}
+func (i *fakeFileIndex) Rebuild(context.Context, string) (storage.FileManifest, error) {
+	i.rebuilds++
+	if i.err != nil && !errors.Is(i.err, storage.ErrFileIndexNotFound) {
+		return storage.FileManifest{}, i.err
+	}
+	return i.manifest, nil
+}
+
 type recordingFileStore struct {
 	objects map[string]minio.ObjectInfo
 	order   *[]string
@@ -137,13 +171,6 @@ func (s *recordingFileStore) DeleteObject(_ context.Context, key string) error {
 	delete(s.objects, key)
 	return nil
 }
-func (*recordingFileStore) ComputeUserStats(context.Context, string) (storage.UserStats, error) {
-	return storage.UserStats{}, nil
-}
-func (*recordingFileStore) ListObjects(context.Context, string) ([]minio.ObjectInfo, error) {
-	return nil, nil
-}
-
 func TestSanitizeFilename(t *testing.T) {
 	tests := []struct {
 		input string
@@ -298,6 +325,7 @@ func TestUploadStoresBeforePublishing(t *testing.T) {
 	thumbs := &fakeThumbnailPublisher{order: &order}
 	h := &Handler{
 		store:      store,
+		files:      &fakeFileIndex{order: &order},
 		thumbs:     thumbs,
 		checksums:  &fakeChecksumIndex{existing: make(map[string]string), order: &order},
 		events:     emitter,
@@ -312,7 +340,7 @@ func TestUploadStoresBeforePublishing(t *testing.T) {
 		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
 	gotOrder := strings.Join(order, ",")
-	if gotOrder != "storage:put,checksum:add,thumbnail:publish,emit:create" {
+	if gotOrder != "storage:put,checksum:add,file-index:upsert,thumbnail:publish,emit:create" {
 		t.Fatalf("unexpected operation order: %s", gotOrder)
 	}
 	if len(thumbs.jobs) != 1 ||
@@ -328,6 +356,7 @@ func TestUploadReturnsServiceUnavailableAfterPublishFailure(t *testing.T) {
 	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
 	h := &Handler{
 		store:      store,
+		files:      &fakeFileIndex{},
 		thumbs:     &fakeThumbnailPublisher{},
 		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
 		events:     &fakeEmitter{err: publishErr},
@@ -389,6 +418,7 @@ func TestUploadSucceedsAfterThumbnailPublishFailure(t *testing.T) {
 	emitter := &fakeEmitter{}
 	h := &Handler{
 		store:      store,
+		files:      &fakeFileIndex{},
 		thumbs:     &fakeThumbnailPublisher{err: errors.New("thumbnail broker unavailable")},
 		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
 		events:     emitter,
@@ -417,6 +447,39 @@ func TestUploadSucceedsAfterThumbnailPublishFailure(t *testing.T) {
 	}
 }
 
+func TestListFilesRepairsMissingManifest(t *testing.T) {
+	files := &fakeFileIndex{
+		err: storage.ErrFileIndexNotFound,
+		manifest: storage.FileManifest{Files: []storage.FileIndexItem{
+			{
+				Key:          "files/alice/2026/06/report.txt",
+				Size:         12,
+				ContentType:  "text/plain",
+				LastModified: time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC),
+			},
+		}},
+	}
+	h := &Handler{files: files}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.ListFiles)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if files.rebuilds != 1 {
+		t.Fatalf("rebuilds=%d, want 1", files.rebuilds)
+	}
+	var got FileListResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalCount != 1 || len(got.Files) != 1 || got.Files[0].Key != "files/alice/2026/06/report.txt" {
+		t.Fatalf("unexpected response: %+v", got)
+	}
+}
+
 func TestDeleteRemovesBeforePublishing(t *testing.T) {
 	var order []string
 	key := "files/alice/report.txt"
@@ -426,6 +489,7 @@ func TestDeleteRemovesBeforePublishing(t *testing.T) {
 	}
 	h := &Handler{
 		store:      store,
+		files:      &fakeFileIndex{order: &order},
 		checksums:  &fakeChecksumIndex{order: &order},
 		events:     &fakeEmitter{order: &order},
 		deviceName: "reliquary",
@@ -439,7 +503,7 @@ func TestDeleteRemovesBeforePublishing(t *testing.T) {
 		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
 	gotOrder := strings.Join(order, ",")
-	if gotOrder != "storage:delete,checksum:remove,storage:delete,emit:delete" {
+	if gotOrder != "storage:delete,checksum:remove,storage:delete,file-index:remove,emit:delete" {
 		t.Fatalf("unexpected operation order: %s", gotOrder)
 	}
 }

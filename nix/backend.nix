@@ -9,6 +9,8 @@ pkgs.buildGoModule {
   vendorHash = "sha256-/OGWqjb9QTneTfGT4fz2LBIAGqMIEVuLQkbnx+OVrSI=";
   subPackages = [
     "."
+    "cmd/reliquary-user"
+    "cmd/rebuild-file-index"
     "cmd/reliquary-thumbnail-worker"
     "cmd/reliquary-requeue-thumbnails"
     "cmd/restore-archive"

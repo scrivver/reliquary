@@ -70,6 +70,9 @@ func create(args []string, role auth.Role) error {
 	if err := users.Create(context.Background(), *username, *password, role); err != nil {
 		return fmt.Errorf("create %s %q: %w", role, *username, err)
 	}
+	if err := storage.NewFileIndex(store).Ensure(context.Background(), *username); err != nil {
+		return fmt.Errorf("initialize file index for %q: %w", *username, err)
+	}
 
 	fmt.Printf("created %s user %q\n", role, *username)
 	return nil

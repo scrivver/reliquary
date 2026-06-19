@@ -94,6 +94,35 @@ attach the APK to the matching GitHub Release. The current Android release build
 uses the debug signing config, so treat it as an installable test artifact until
 production signing keys are configured.
 
+## File Index Maintenance
+
+Reliquary stores per-user file manifests at:
+
+```text
+indexes/{username}/files.json
+```
+
+The API uses these manifests for file listing and stats so normal browsing does
+not call object-storage `ListObjects`.
+
+For existing data, imported files, or manifest repair, run:
+
+```bash
+cd backend
+go run ./cmd/rebuild-file-index --username alice
+go run ./cmd/rebuild-file-index --all
+```
+
+In the Compose deployment, run the installed command from the API service:
+
+```bash
+docker compose exec api rebuild-file-index --all
+```
+
+If a manifest is missing, `/api/files` repairs it once by rebuilding from object
+storage. Run the rebuild command explicitly after large imports or migrations so
+the first user request does not pay that cost.
+
 ## Manual Setup Without Nix Or Containers
 
 Install:

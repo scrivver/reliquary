@@ -7,10 +7,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -33,8 +33,15 @@ type fileStore interface {
 	PresignGet(ctx context.Context, key string, forceDownload bool) (*url.URL, error)
 	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
 	DeleteObject(ctx context.Context, key string) error
-	ComputeUserStats(ctx context.Context, username string) (storage.UserStats, error)
-	ListObjects(ctx context.Context, prefix string) ([]minio.ObjectInfo, error)
+}
+
+type fileIndexStore interface {
+	Ensure(ctx context.Context, username string) error
+	Load(ctx context.Context, username string) (storage.FileManifest, error)
+	Upsert(ctx context.Context, username string, item storage.FileIndexItem) error
+	Remove(ctx context.Context, username, key string) error
+	DeleteUser(ctx context.Context, username string) error
+	Rebuild(ctx context.Context, username string) (storage.FileManifest, error)
 }
 
 type checksumIndex interface {
@@ -46,6 +53,7 @@ type checksumIndex interface {
 
 type Handler struct {
 	store        fileStore
+	files        fileIndexStore
 	thumbs       thumbnail.Publisher
 	checksums    checksumIndex
 	events       event.Emitter
@@ -56,12 +64,14 @@ type Handler struct {
 func New(
 	cfg *config.Config,
 	store *storage.Client,
+	files *storage.FileIndex,
 	thumbs thumbnail.Publisher,
 	checksums *storage.ChecksumIndex,
 	events event.Emitter,
 ) *Handler {
 	return &Handler{
 		store:        store,
+		files:        files,
 		thumbs:       thumbs,
 		checksums:    checksums,
 		events:       events,
@@ -211,6 +221,23 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to update checksum index", "error", err)
 	}
 
+	stat, err := h.store.StatObject(r.Context(), fileKey)
+	if err != nil {
+		slog.Error("failed to stat uploaded object for file index", "key", fileKey, "error", err)
+		httpError(w, "file stored but file index could not be updated", http.StatusInternalServerError)
+		return
+	}
+	if err := h.files.Upsert(r.Context(), username, storage.FileIndexItemFromObject(
+		stat,
+		checksum,
+		meta["Upload-Date"],
+		meta["Original-Name"],
+	)); err != nil {
+		slog.Error("failed to update file index", "key", fileKey, "error", err)
+		httpError(w, "file stored but file index could not be updated", http.StatusInternalServerError)
+		return
+	}
+
 	warning, err := h.publishUploadEffects(r.Context(), fileKey, contentType, checksum)
 	if err != nil {
 		slog.Error("failed to publish upload effects", "key", fileKey, "error", err)
@@ -225,7 +252,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 // GET /api/files?offset=0&limit=50
 func (h *Handler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	username := auth.UsernameFromContext(r.Context())
-	h.listObjectsWithPagination(w, r, "files/"+username+"/", "files/", "thumbs/")
+	h.listFilesWithPagination(w, r, username)
 }
 
 // PresignDownload generates a presigned GET URL routed through the reverse proxy.
@@ -342,6 +369,12 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		h.store.DeleteObject(r.Context(), thumbKey)
 	}
 
+	if err := h.files.Remove(r.Context(), username, key); err != nil {
+		slog.Error("failed to update file index on delete", "key", key, "error", err)
+		httpError(w, "file deleted but file index could not be updated; rebuild the file index", http.StatusInternalServerError)
+		return
+	}
+
 	if err := h.emitDelete(r.Context(), key); err != nil {
 		slog.Error("failed to publish delete event", "key", key, "error", err)
 		httpError(w, "file deleted but its event could not be published; retry delete", http.StatusServiceUnavailable)
@@ -422,13 +455,14 @@ type ChangePasswordRequest struct {
 	Password string `json:"password"`
 }
 
-func NewAdminHandler(users *auth.UserStore, store *storage.Client) *AdminHandler {
-	return &AdminHandler{users: users, store: store}
+func NewAdminHandler(users *auth.UserStore, store *storage.Client, files *storage.FileIndex) *AdminHandler {
+	return &AdminHandler{users: users, store: store, files: files}
 }
 
 type AdminHandler struct {
 	users *auth.UserStore
 	store *storage.Client
+	files fileIndexStore
 }
 
 // CreateUser creates a new user.
@@ -450,6 +484,11 @@ func (ah *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	if err := ah.users.Create(r.Context(), req.Username, req.Password, auth.RoleUser); err != nil {
 		httpError(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if err := ah.files.Ensure(r.Context(), req.Username); err != nil {
+		slog.Error("failed to initialize file index for user", "user", req.Username, "error", err)
+		httpError(w, "user created but file index could not be initialized", http.StatusInternalServerError)
 		return
 	}
 
@@ -550,6 +589,9 @@ func (ah *AdminHandler) deleteUserData(ctx context.Context, username string) err
 	if err := ah.store.DeleteObject(ctx, username+"/checksums.json"); err != nil && !storage.IsObjectNotFound(err) {
 		return fmt.Errorf("delete checksum index: %w", err)
 	}
+	if err := ah.files.DeleteUser(ctx, username); err != nil {
+		return fmt.Errorf("delete file index: %w", err)
+	}
 	return nil
 }
 
@@ -632,13 +674,13 @@ func (ah *AdminHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 // GET /api/stats
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	username := auth.UsernameFromContext(r.Context())
-	stats, err := h.store.ComputeUserStats(r.Context(), username)
+	manifest, err := h.loadManifestRepairingMissing(r.Context(), username)
 	if err != nil {
 		slog.Error("stats failed", "user", username, "error", err)
 		httpError(w, "failed to compute stats", http.StatusInternalServerError)
 		return
 	}
-	jsonResponse(w, stats)
+	jsonResponse(w, storage.ComputeStatsFromManifest(manifest))
 }
 
 // AdminStats returns aggregate storage analytics across all users.
@@ -656,11 +698,16 @@ func (ah *AdminHandler) AdminStats(w http.ResponseWriter, r *http.Request) {
 	var totalFiles int
 
 	for username := range users {
-		stats, err := ah.store.ComputeUserStats(r.Context(), username)
+		manifest, err := ah.files.Load(r.Context(), username)
 		if err != nil {
+			if errors.Is(err, storage.ErrFileIndexNotFound) {
+				slog.Warn("admin stats skipped missing file index", "user", username)
+				continue
+			}
 			slog.Error("admin stats failed", "user", username, "error", err)
 			continue
 		}
+		stats := storage.ComputeStatsFromManifest(manifest)
 		allStats = append(allStats, perUser{Username: username, UserStats: stats})
 		totalSize += stats.TotalSize
 		totalFiles += stats.FileCount
@@ -675,7 +722,7 @@ func (ah *AdminHandler) AdminStats(w http.ResponseWriter, r *http.Request) {
 
 // --- Shared helpers ---
 
-func (h *Handler) listObjectsWithPagination(w http.ResponseWriter, r *http.Request, prefix, filesSegment, thumbsSegment string) {
+func (h *Handler) listFilesWithPagination(w http.ResponseWriter, r *http.Request, username string) {
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 200 {
@@ -685,60 +732,62 @@ func (h *Handler) listObjectsWithPagination(w http.ResponseWriter, r *http.Reque
 		offset = 0
 	}
 
-	objects, err := h.store.ListObjects(r.Context(), prefix)
+	manifest, err := h.loadManifestRepairingMissing(r.Context(), username)
 	if err != nil {
-		slog.Error("list objects failed", "prefix", prefix, "error", err)
+		slog.Error("load file index failed", "user", username, "error", err)
 		httpError(w, "failed to list files", http.StatusInternalServerError)
 		return
 	}
 
-	totalCount := len(objects)
+	files := manifest.Files
+	totalCount := len(files)
 
 	end := offset + limit
-	if offset > len(objects) {
-		objects = nil
+	if offset > len(files) {
+		files = nil
 	} else {
-		if end > len(objects) {
-			end = len(objects)
+		if end > len(files) {
+			end = len(files)
 		}
-		objects = objects[offset:end]
+		files = files[offset:end]
 	}
 
-	files := make([]FileItem, 0, len(objects))
-	for _, obj := range objects {
-		ct := obj.ContentType
-		if ct == "" {
-			ct = mime.TypeByExtension(path.Ext(obj.Key))
-		}
-		if ct == "" {
-			ct = "application/octet-stream"
-		}
+	items := make([]FileItem, 0, len(files))
+	for _, file := range files {
+		ct := file.ContentType
 		item := FileItem{
-			Key:          obj.Key,
-			Size:         obj.Size,
+			Key:          file.Key,
+			Size:         file.Size,
 			ContentType:  ct,
-			LastModified: obj.LastModified,
+			LastModified: file.LastModified,
+			Checksum:     file.Checksum,
+			UploadDate:   file.UploadDate,
+			OriginalName: file.OriginalName,
 		}
 		if hasThumbnailSupport(ct) {
-			item.ThumbnailKey = strings.Replace(obj.Key, filesSegment, thumbsSegment, 1)
+			item.ThumbnailKey = strings.Replace(item.Key, "files/", "thumbs/", 1)
 		}
-		if stat, err := h.store.StatObject(r.Context(), obj.Key); err == nil {
-			item.Checksum = stat.UserMetadata["Checksum"]
-			item.UploadDate = stat.UserMetadata["Upload-Date"]
-			item.OriginalName = stat.UserMetadata["Original-Name"]
-			if stat.ContentType != "" {
-				item.ContentType = stat.ContentType
-			}
-		}
-		files = append(files, item)
+		items = append(items, item)
 	}
 
 	jsonResponse(w, FileListResponse{
-		Files:      files,
+		Files:      items,
 		TotalCount: totalCount,
 		Offset:     offset,
 		Limit:      limit,
 	})
+}
+
+func (h *Handler) loadManifestRepairingMissing(ctx context.Context, username string) (storage.FileManifest, error) {
+	manifest, err := h.files.Load(ctx, username)
+	if err == nil {
+		return manifest, nil
+	}
+	if !errors.Is(err, storage.ErrFileIndexNotFound) {
+		return storage.FileManifest{}, err
+	}
+	slog.Warn("file index missing; rebuilding from object storage", "user", username)
+	return h.files.Rebuild(ctx, username)
 }
 
 // rekeyPrefix swaps the leading `from` segment of key with `to`.

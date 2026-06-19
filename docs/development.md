@@ -161,6 +161,22 @@ Create a standard user from the same command:
 RELIQUARY_USER_PASSWORD='change-me' go run ./cmd/reliquary-user create-user --username bob
 ```
 
+## File Index Rebuild
+
+Reliquary serves the file explorer from per-user manifest objects instead of
+listing the object-storage bucket during normal browsing. Rebuild an index after
+importing existing files or repairing a stale manifest:
+
+```bash
+cd backend
+go run ./cmd/rebuild-file-index --username alice
+go run ./cmd/rebuild-file-index --all
+```
+
+The rebuild command is intentionally allowed to call object-storage
+`ListObjects`. Normal `GET /api/files` requests use the manifest; if a manifest
+is missing, the API repairs it once by rebuilding from object storage.
+
 ## Restoring Data From Older Releases
 
 Lifecycle archival is no longer active. Before or immediately after upgrading an
