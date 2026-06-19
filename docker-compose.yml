@@ -84,6 +84,8 @@ services:
   thumbnail-worker:
     image: reliquary-thumbnail-worker:latest
     restart: unless-stopped
+    tmpfs:
+      - /tmp:size=512m,mode=1777
     depends_on:
       rabbitmq:
         condition: service_healthy

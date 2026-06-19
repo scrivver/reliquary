@@ -44,12 +44,20 @@ api:
   image: ghcr.io/scrivver/reliquary-api:latest
 thumbnail-worker:
   image: ghcr.io/scrivver/reliquary-thumbnail-worker:latest
+  tmpfs:
+    - /tmp:size=512m,mode=1777
 ingress:
   image: ghcr.io/scrivver/reliquary-web:latest
 ```
 
 Use SHA or version tags instead of `latest` for reproducible production
 deployments.
+
+The thumbnail worker needs a writable `/tmp` directory while generating PDF
+thumbnails: it downloads the source PDF there before invoking `pdftoppm`. In
+Compose, prefer a service-level tmpfs mount as shown above. A regular writable
+filesystem mount also works if you want temporary files to count against node
+disk instead of memory.
 
 Check startup and health:
 
@@ -110,6 +118,36 @@ The Compose file sets internal-only service addresses directly:
 `RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672`. Override those only when the
 API or worker connects to external infrastructure instead of the bundled
 Compose services.
+
+## Kubernetes Worker Temp Storage
+
+When deploying the worker to Kubernetes, mount a writable `/tmp` into the worker
+container. A memory-backed `emptyDir` is usually the closest equivalent to the
+Compose tmpfs mount:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reliquary-thumbnail-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: thumbnail-worker
+          image: ghcr.io/scrivver/reliquary-thumbnail-worker:latest
+          volumeMounts:
+            - name: worker-tmp
+              mountPath: /tmp
+      volumes:
+        - name: worker-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+```
+
+If memory pressure is a concern, omit `medium: Memory` and Kubernetes will back
+the `emptyDir` with node storage instead.
 
 ## Scaling
 

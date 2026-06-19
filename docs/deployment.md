@@ -3,6 +3,12 @@
 The default deployment uses Docker Compose with separate services for ingress,
 API, thumbnail worker, MinIO, and RabbitMQ.
 
+The thumbnail worker requires a writable `/tmp` directory for PDF thumbnail
+generation because it downloads each source PDF before calling `pdftoppm`. The
+checked-in Compose files mount `/tmp` as tmpfs for the worker. Kubernetes
+deployments should mount `/tmp` with either a memory-backed `emptyDir` or a
+regular writable filesystem-backed `emptyDir`.
+
 ## Docker Compose
 
 Build and load the images locally:
@@ -93,6 +99,21 @@ requests and branch pushes publish it as a workflow artifact. `v*` tags also
 attach the APK to the matching GitHub Release. The current Android release build
 uses the debug signing config, so treat it as an installable test artifact until
 production signing keys are configured.
+
+## Desktop Apps
+
+Build desktop apps locally:
+
+```bash
+cd frontend
+flutter build linux --release
+flutter build windows --release
+```
+
+GitHub Actions builds Linux and Windows desktop release bundles on frontend
+changes. Pull requests, branch pushes, tags, and manual dispatches publish the
+bundles as workflow artifacts named `reliquary-linux-x64` and
+`reliquary-windows-x64`.
 
 ## File Index Maintenance
 
