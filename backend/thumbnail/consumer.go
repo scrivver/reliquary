@@ -120,11 +120,39 @@ func (c *Consumer) handle(ctx context.Context, delivery amqp.Delivery) {
 
 	attempt := deliveryAttempt(delivery) + 1
 	if attempt >= c.maxAttempts {
+		slog.Error(
+			"thumbnail job failed; dead-lettering",
+			"key",
+			job.FileKey,
+			"content_type",
+			job.ContentType,
+			"attempt",
+			attempt,
+			"max_attempts",
+			c.maxAttempts,
+			"error",
+			err,
+		)
 		c.deadLetter(ctx, delivery, attempt, err)
 		return
 	}
 
 	delay := time.Duration(1<<(attempt-1)) * time.Second
+	slog.Warn(
+		"thumbnail job failed; retrying",
+		"key",
+		job.FileKey,
+		"content_type",
+		job.ContentType,
+		"attempt",
+		attempt,
+		"max_attempts",
+		c.maxAttempts,
+		"retry_in",
+		delay,
+		"error",
+		err,
+	)
 	select {
 	case <-time.After(delay):
 	case <-ctx.Done():
