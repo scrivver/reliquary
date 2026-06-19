@@ -203,11 +203,30 @@ class _GalleryScreenState extends State<GalleryScreen> {
       return;
     }
 
-    if (file.isImage) {
-      _viewFullImage(file);
-    } else {
-      _showFileDetails(file);
-    }
+    _showFileDetails(file);
+  }
+
+  Future<void> _showDesktopImagePreview(FileItem file) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      builder: (dialogContext) {
+        final size = MediaQuery.sizeOf(dialogContext);
+        return Dialog(
+          insetPadding: const EdgeInsets.all(40),
+          backgroundColor: Colors.transparent,
+          child: SizedBox(
+            width: size.width * 0.82,
+            height: size.height * 0.82,
+            child: _DesktopImagePreviewPane(
+              file: file,
+              apiService: widget.apiService,
+              onClose: () => Navigator.of(dialogContext).pop(),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _viewFullImage(FileItem file) async {
@@ -281,6 +300,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
             },
             child: const Text('DELETE', style: TextStyle(color: _kPrimary)),
           ),
+          if (file.isImage)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _viewFullImage(file);
+              },
+              child: const Text('PREVIEW'),
+            ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -479,6 +506,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
               onDownload: _detailFile == null
                   ? null
                   : () => _downloadFile(_detailFile!),
+              onPreview: _detailFile == null || !_detailFile!.isImage
+                  ? null
+                  : () => _showDesktopImagePreview(_detailFile!),
               onDelete: _detailFile == null
                   ? null
                   : () => _deleteFile(_detailFile!),
@@ -804,6 +834,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       _toggleSelect(file);
                     },
               onDownload: () => _downloadFile(file),
+              onPreview: file.isImage
+                  ? () => _showDesktopImagePreview(file)
+                  : null,
               onDelete: () => _deleteFile(file),
             ),
         ],
@@ -855,6 +888,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         _toggleSelect(file);
                       },
                 onDownload: () => _downloadFile(file),
+                onPreview: file.isImage
+                    ? () => _showDesktopImagePreview(file)
+                    : null,
                 onDelete: () => _deleteFile(file),
               ),
           ],
@@ -1490,6 +1526,7 @@ class _DesktopFileRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final VoidCallback onDownload;
+  final VoidCallback? onPreview;
   final VoidCallback onDelete;
 
   const _DesktopFileRow({
@@ -1502,6 +1539,7 @@ class _DesktopFileRow extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onDownload,
+    required this.onPreview,
     required this.onDelete,
   });
 
@@ -1538,10 +1576,16 @@ class _DesktopFileRow extends StatelessWidget {
       size: size,
       date: _formatDate(file.lastModified),
       actions: SizedBox(
-        width: 96,
+        width: onPreview == null ? 96 : 144,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
+            if (onPreview != null)
+              IconButton(
+                tooltip: 'Preview',
+                onPressed: onPreview,
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+              ),
             IconButton(
               tooltip: 'Download',
               onPressed: onDownload,
@@ -1550,11 +1594,14 @@ class _DesktopFileRow extends StatelessWidget {
             PopupMenuButton<String>(
               onSelected: (action) {
                 if (action == 'details') onTap();
+                if (action == 'preview') onPreview?.call();
                 if (action == 'delete') onDelete();
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'details', child: Text('Details')),
-                PopupMenuItem(
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'details', child: Text('Details')),
+                if (onPreview != null)
+                  const PopupMenuItem(value: 'preview', child: Text('Preview')),
+                const PopupMenuItem(
                   value: 'delete',
                   child: Text('Delete', style: TextStyle(color: _kPrimary)),
                 ),
@@ -1656,6 +1703,7 @@ class _DesktopFileCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
   final VoidCallback onDownload;
+  final VoidCallback? onPreview;
   final VoidCallback onDelete;
 
   const _DesktopFileCard({
@@ -1668,6 +1716,7 @@ class _DesktopFileCard extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onDownload,
+    required this.onPreview,
     required this.onDelete,
   });
 
@@ -1759,13 +1808,25 @@ class _DesktopFileCard extends StatelessWidget {
                     icon: const Icon(Icons.more_vert, color: _kSecondary),
                     onSelected: (action) {
                       if (action == 'details') onTap();
+                      if (action == 'preview') onPreview?.call();
                       if (action == 'download') onDownload();
                       if (action == 'delete') onDelete();
                     },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'details', child: Text('Details')),
-                      PopupMenuItem(value: 'download', child: Text('Download')),
-                      PopupMenuItem(
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'details',
+                        child: Text('Details'),
+                      ),
+                      if (onPreview != null)
+                        const PopupMenuItem(
+                          value: 'preview',
+                          child: Text('Preview'),
+                        ),
+                      const PopupMenuItem(
+                        value: 'download',
+                        child: Text('Download'),
+                      ),
+                      const PopupMenuItem(
                         value: 'delete',
                         child: Text(
                           'Delete',
@@ -2054,6 +2115,132 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
   }
 }
 
+class _DesktopImagePreviewPane extends StatefulWidget {
+  final FileItem file;
+  final ApiService apiService;
+  final VoidCallback onClose;
+
+  const _DesktopImagePreviewPane({
+    required this.file,
+    required this.apiService,
+    required this.onClose,
+  });
+
+  @override
+  State<_DesktopImagePreviewPane> createState() =>
+      _DesktopImagePreviewPaneState();
+}
+
+class _DesktopImagePreviewPaneState extends State<_DesktopImagePreviewPane> {
+  String? _url;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopImagePreviewPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.file.key != widget.file.key) {
+      _loadImage();
+    }
+  }
+
+  Future<void> _loadImage() async {
+    final fileKey = widget.file.key;
+    setState(() {
+      _url = null;
+      _error = null;
+    });
+
+    try {
+      final url = await widget.apiService.presignDownload(fileKey);
+      if (!mounted || widget.file.key != fileKey) return;
+      setState(() => _url = url);
+    } catch (e) {
+      if (!mounted || widget.file.key != fileKey) return;
+      setState(() => _error = e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned.fill(child: Center(child: _buildImage())),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: IconButton(
+            tooltip: 'Close preview',
+            onPressed: widget.onClose,
+            icon: const Icon(Icons.close, size: 24),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black.withValues(alpha: 0.48),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImage() {
+    if (_error != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.broken_image_outlined, size: 56, color: _kPrimary),
+          const SizedBox(height: 12),
+          const Text(
+            'Failed to load preview',
+            style: TextStyle(fontFamily: 'Inter', color: _kText),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: _loadImage, child: const Text('Retry')),
+        ],
+      );
+    }
+
+    final url = _url;
+    if (url == null) {
+      return const CircularProgressIndicator(color: _kPrimary);
+    }
+
+    return InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 5,
+      child: Image.network(
+        url,
+        fit: BoxFit.contain,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return const CircularProgressIndicator(color: _kPrimary);
+        },
+        errorBuilder: (_, _, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.broken_image_outlined, size: 56, color: _kPrimary),
+            const SizedBox(height: 12),
+            const Text(
+              'Failed to load preview',
+              style: TextStyle(fontFamily: 'Inter', color: _kText),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(onPressed: _loadImage, child: const Text('Retry')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ExplorerIcon extends StatelessWidget {
   final IconData icon;
   final Color tint;
@@ -2101,6 +2288,7 @@ class _DesktopDetailsDrawer extends StatelessWidget {
   final ApiService apiService;
   final VoidCallback onClose;
   final VoidCallback? onDownload;
+  final VoidCallback? onPreview;
   final VoidCallback? onDelete;
 
   const _DesktopDetailsDrawer({
@@ -2109,6 +2297,7 @@ class _DesktopDetailsDrawer extends StatelessWidget {
     required this.apiService,
     required this.onClose,
     required this.onDownload,
+    required this.onPreview,
     required this.onDelete,
   });
 
@@ -2141,6 +2330,7 @@ class _DesktopDetailsDrawer extends StatelessWidget {
                         apiService: apiService,
                         onClose: onClose,
                         onDownload: onDownload,
+                        onPreview: onPreview,
                         onDelete: onDelete,
                       ),
               ),
@@ -2158,6 +2348,7 @@ class _DesktopDetailsContent extends StatelessWidget {
   final ApiService apiService;
   final VoidCallback onClose;
   final VoidCallback? onDownload;
+  final VoidCallback? onPreview;
   final VoidCallback? onDelete;
 
   const _DesktopDetailsContent({
@@ -2166,6 +2357,7 @@ class _DesktopDetailsContent extends StatelessWidget {
     required this.apiService,
     required this.onClose,
     required this.onDownload,
+    required this.onPreview,
     required this.onDelete,
   });
 
@@ -2263,6 +2455,24 @@ class _DesktopDetailsContent extends StatelessWidget {
             ),
             child: Row(
               children: [
+                if (onPreview != null) ...[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _kText,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: const BorderSide(color: _kBorder),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: onPreview,
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('PREVIEW'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 Expanded(
                   child: FilledButton.icon(
                     style: FilledButton.styleFrom(
