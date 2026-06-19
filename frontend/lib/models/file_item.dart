@@ -43,5 +43,9 @@ class FileItem {
 
   bool get isImage => contentType.startsWith('image/');
 
+  bool get isPdf => contentType == 'application/pdf';
+
   bool get isVideo => contentType.startsWith('video/');
+
+  bool get isPreviewable => isImage || isPdf;
 }

@@ -7,6 +7,7 @@ import '../models/file_item.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/download_helper.dart' as dl;
+import '../widgets/pdf_preview_frame.dart';
 import 'responsive_page.dart';
 import 'upload_screen.dart';
 
@@ -206,7 +207,18 @@ class _GalleryScreenState extends State<GalleryScreen> {
     _showFileDetails(file);
   }
 
-  Future<void> _showDesktopImagePreview(FileItem file) async {
+  Future<void> _previewFile(FileItem file) async {
+    if (isDesktopWidth(context) || file.isPdf) {
+      await _showPreviewModal(file);
+      return;
+    }
+
+    if (file.isImage) {
+      await _viewFullImage(file);
+    }
+  }
+
+  Future<void> _showPreviewModal(FileItem file) async {
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.72),
@@ -218,10 +230,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
           child: SizedBox(
             width: size.width * 0.82,
             height: size.height * 0.82,
-            child: _DesktopImagePreviewPane(
+            child: _PreviewModalContent(
               file: file,
               apiService: widget.apiService,
-              onClose: () => Navigator.of(dialogContext).pop(),
             ),
           ),
         );
@@ -300,11 +311,11 @@ class _GalleryScreenState extends State<GalleryScreen> {
             },
             child: const Text('DELETE', style: TextStyle(color: _kPrimary)),
           ),
-          if (file.isImage)
+          if (file.isPreviewable)
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                _viewFullImage(file);
+                _previewFile(file);
               },
               child: const Text('PREVIEW'),
             ),
@@ -506,9 +517,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
               onDownload: _detailFile == null
                   ? null
                   : () => _downloadFile(_detailFile!),
-              onPreview: _detailFile == null || !_detailFile!.isImage
+              onPreview: _detailFile == null || !_detailFile!.isPreviewable
                   ? null
-                  : () => _showDesktopImagePreview(_detailFile!),
+                  : () => _previewFile(_detailFile!),
               onDelete: _detailFile == null
                   ? null
                   : () => _deleteFile(_detailFile!),
@@ -834,9 +845,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       _toggleSelect(file);
                     },
               onDownload: () => _downloadFile(file),
-              onPreview: file.isImage
-                  ? () => _showDesktopImagePreview(file)
-                  : null,
+              onPreview: file.isPreviewable ? () => _previewFile(file) : null,
               onDelete: () => _deleteFile(file),
             ),
         ],
@@ -888,9 +897,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         _toggleSelect(file);
                       },
                 onDownload: () => _downloadFile(file),
-                onPreview: file.isImage
-                    ? () => _showDesktopImagePreview(file)
-                    : null,
+                onPreview: file.isPreviewable ? () => _previewFile(file) : null,
                 onDelete: () => _deleteFile(file),
               ),
           ],
@@ -2115,23 +2122,17 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
   }
 }
 
-class _DesktopImagePreviewPane extends StatefulWidget {
+class _PreviewModalContent extends StatefulWidget {
   final FileItem file;
   final ApiService apiService;
-  final VoidCallback onClose;
 
-  const _DesktopImagePreviewPane({
-    required this.file,
-    required this.apiService,
-    required this.onClose,
-  });
+  const _PreviewModalContent({required this.file, required this.apiService});
 
   @override
-  State<_DesktopImagePreviewPane> createState() =>
-      _DesktopImagePreviewPaneState();
+  State<_PreviewModalContent> createState() => _PreviewModalContentState();
 }
 
-class _DesktopImagePreviewPaneState extends State<_DesktopImagePreviewPane> {
+class _PreviewModalContentState extends State<_PreviewModalContent> {
   String? _url;
   Object? _error;
 
@@ -2142,7 +2143,7 @@ class _DesktopImagePreviewPaneState extends State<_DesktopImagePreviewPane> {
   }
 
   @override
-  void didUpdateWidget(covariant _DesktopImagePreviewPane oldWidget) {
+  void didUpdateWidget(covariant _PreviewModalContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.key != widget.file.key) {
       _loadImage();
@@ -2168,27 +2169,7 @@ class _DesktopImagePreviewPaneState extends State<_DesktopImagePreviewPane> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(child: Center(child: _buildImage())),
-        Positioned(
-          top: 0,
-          right: 0,
-          child: IconButton(
-            tooltip: 'Close preview',
-            onPressed: widget.onClose,
-            icon: const Icon(Icons.close, size: 24),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.48),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    return Center(child: _buildImage());
   }
 
   Widget _buildImage() {
@@ -2211,6 +2192,10 @@ class _DesktopImagePreviewPaneState extends State<_DesktopImagePreviewPane> {
     final url = _url;
     if (url == null) {
       return const CircularProgressIndicator(color: _kPrimary);
+    }
+
+    if (widget.file.isPdf) {
+      return PdfPreviewFrame(url: url);
     }
 
     return InteractiveViewer(
