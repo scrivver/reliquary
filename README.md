@@ -12,14 +12,34 @@ Reliquary preserves what the world discards.
 
 > Artifacts stored in the Reliquary are rarely important. But importance changes with time.
 
+## What is it for?
+
+Reliquary is for the files that do not need a full productivity suite around
+them, but still deserve a durable place to live: old photos, videos, document
+exports, backups, project archives, downloaded media, and other digital things
+that may not feel important today.
+
+There are already many capable self-hosted file platforms, such as Nextcloud
+and Seafile. Reliquary is intentionally smaller in scope. It is not trying to be
+a collaboration suite, document editor, sync client, calendar, or general cloud
+workspace. The main idea is simpler: provide a quiet archive where you can put
+old files, browse them when needed, and otherwise forget about them.
+
+The storage layer is built on the S3-compatible API so Reliquary does not need
+to own the hard part of durable object storage. The examples use MinIO, but the
+same idea can work with AWS S3, Cloudflare R2, Backblaze B2, or self-hosted
+backends such as SeaweedFS, Garage, MinIO, or Ceph.
+
 ## What It Does
 
-Reliquary stores personal files in a self-hosted archive with a focused file
-explorer, thumbnails, duplicate detection, and storage analytics.
+Reliquary is an opinionated frontend and API for S3-compatible storage. It keeps
+the user-facing workflow focused on storing files, finding them later, previewing
+common media types, and understanding how the archive is growing over time.
 
-It is built for artifacts you want to keep, but do not need to actively work
-with every day: old photos, videos, exports, documents, archives, and other
-digital remnants.
+Instead of exposing every storage feature directly, Reliquary adds the pieces
+that make cold storage pleasant for personal use: uploads with duplicate
+detection, thumbnails, a searchable file explorer, per-user isolation, and simple
+storage analytics.
 
 ## Features
 
@@ -38,10 +58,15 @@ digital remnants.
 For a normal self-hosted deployment, use the Docker Compose setup:
 
 ```bash
-nix develop
-./bin/deploy
 cp .env.example .env
 docker compose up -d
+```
+
+### Building the image
+
+```bash
+nix develop
+./bin/deploy
 ```
 
 Before exposing the service, edit `.env` and change the default secrets and
@@ -62,6 +87,29 @@ The app is available at `http://localhost:2080` by default.
 Reliquary ships as a web app in the default deployment. Native Flutter builds
 can also connect to a Reliquary server URL; see [Deployment](docs/deployment.md)
 for build details.
+
+## Contributing
+
+Contributions are welcome, especially fixes and improvements that keep Reliquary
+focused on simple, durable personal file storage.
+
+Before opening a pull request:
+
+- Keep changes scoped and avoid adding broad platform features unless they fit
+  the cold-storage idea.
+- Follow the existing Go and Dart style. Use `gofmt` for backend code and
+  `dart format` for frontend code.
+- Add focused tests for behavior changes when practical.
+- Run the relevant checks before submitting:
+
+```bash
+cd backend && go test ./...
+cd frontend && flutter test
+cd frontend && flutter analyze
+```
+
+For local setup, service commands, and build details, see
+[Development](docs/development.md).
 
 ## License
 
