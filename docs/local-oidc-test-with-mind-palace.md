@@ -41,7 +41,7 @@ dev
 ```
 
 This starts the Reliquary backend in OIDC mode as part of the Mind Palace dev
-tmux session.
+process-compose session.
 
 In a third terminal:
 

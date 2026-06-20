@@ -15,12 +15,74 @@
 	minioInfra = import ./infra/minio.nix { inherit pkgs; };
 	rabbitmqInfra = import ./infra/rabbitmq.nix { inherit pkgs; };
 	caddyInfra = import ./infra/caddy.nix { inherit pkgs; };
+	devAppProcesses = {
+	  backend = {
+	    command = pkgs.writeShellScript "reliquary-dev-backend" ''
+	      set -euo pipefail
+
+	      until [ -f "$MINIO_PORT_FILE" ] && [ -f "$RABBITMQ_AMQP_PORT_FILE" ]; do
+	        echo "Waiting for infrastructure ports..."
+	        sleep 1
+	      done
+
+	      source "$PROJECT_ROOT/bin/load-infra-env"
+	      export LISTEN_ADDR="$DATA_DIR/backend.sock"
+
+	      cd "$PROJECT_ROOT/backend"
+	      exec ${pkgs.air}/bin/air
+	    '';
+	    depends_on = {
+	      minio.condition = "process_healthy";
+	      rabbitmq.condition = "process_healthy";
+	    };
+	  };
+
+	  thumbnail-worker = {
+	    command = pkgs.writeShellScript "reliquary-dev-thumbnail-worker" ''
+	      set -euo pipefail
+
+	      until [ -f "$MINIO_PORT_FILE" ] && [ -f "$RABBITMQ_AMQP_PORT_FILE" ]; do
+	        echo "Waiting for infrastructure ports..."
+	        sleep 1
+	      done
+
+	      source "$PROJECT_ROOT/bin/load-infra-env"
+
+	      cd "$PROJECT_ROOT/backend"
+	      exec ${pkgs.go}/bin/go run ./cmd/reliquary-thumbnail-worker
+	    '';
+	    depends_on = {
+	      minio.condition = "process_healthy";
+	      rabbitmq.condition = "process_healthy";
+	    };
+	  };
+
+	  frontend = {
+	    command = pkgs.writeShellScript "reliquary-dev-frontend" ''
+	      set -euo pipefail
+
+	      cd "$PROJECT_ROOT/frontend"
+	      exec ${pkgs.flutter}/bin/flutter run \
+	        -d web-server \
+	        --web-port=3000 \
+	        --dart-define=RELIQUARY_DEFAULT_API_BASE_URL=http://localhost:2080
+	    '';
+	    depends_on = {
+	      caddy.condition = "process_healthy";
+	      backend.condition = "process_started";
+	    };
+	  };
+	};
 	yamlFormat = pkgs.formats.yaml {};
 	processComposeConfig = yamlFormat.generate "process-compose.yaml" {
 	  version = "0.5";
 	  processes = rabbitmqInfra.processes // minioInfra.processes // caddyInfra.processes;
 	};
-	infraShell = import ./shells/infra.nix { inherit pkgs processComposeConfig; };
+	devProcessComposeConfig = yamlFormat.generate "dev-process-compose.yaml" {
+	  version = "0.5";
+	  processes = rabbitmqInfra.processes // minioInfra.processes // caddyInfra.processes // devAppProcesses;
+	};
+	infraShell = import ./shells/infra.nix { inherit pkgs processComposeConfig devProcessComposeConfig; };
 	backendShell  = import ./shells/backend.nix { inherit pkgs infraShell; };
 	frontendShell = import ./shells/frontend.nix { inherit pkgs infraShell; };
 	backendPkg = import ./nix/backend.nix { inherit pkgs; };

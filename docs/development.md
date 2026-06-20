@@ -5,7 +5,6 @@ This guide is for working on Reliquary locally.
 ## Prerequisites
 
 - [Nix](https://nixos.org/) with flakes enabled
-- [tmux](https://github.com/tmux/tmux) for the `dev` launcher script
 
 ## Quick Start
 
@@ -16,8 +15,10 @@ nix develop
 dev
 ```
 
-This launches infrastructure, backend, and frontend in separate tmux windows.
-Use `Ctrl-b` plus a window number to switch between them.
+This launches MinIO, RabbitMQ, Caddy, the Go API, the thumbnail worker, and the
+Flutter web server in one process-compose session. The application is available
+at `http://localhost:2080`, and the Flutter web server is available directly at
+`http://localhost:3000`.
 
 ## Manual Start
 
@@ -38,6 +39,9 @@ nix develop .#frontend
 nix develop .#infra
 ```
 
+The manual service commands run in the current terminal. Use separate terminals
+when running infrastructure, backend, worker, and frontend individually.
+
 ## Infrastructure
 
 Start MinIO, RabbitMQ, and Caddy:
@@ -57,6 +61,9 @@ Stop infrastructure services:
 ```bash
 shutdown-infra
 ```
+
+The `start-infra` command runs only MinIO, RabbitMQ, and Caddy. Use `dev` when
+you want the full local stack.
 
 The Caddy reverse proxy runs on `http://localhost:2080` and routes:
 
@@ -94,6 +101,14 @@ Run backend tests:
 ```bash
 cd backend
 go test ./...
+```
+
+## Thumbnail Worker
+
+Run the thumbnail worker in a separate terminal after infrastructure is running:
+
+```bash
+start-thumbnail-worker
 ```
 
 ## Frontend

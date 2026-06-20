@@ -13,10 +13,10 @@ Reliquary is split into a Go backend, Flutter frontend, Nix build definitions, a
 ## Build, Test, and Development Commands
 
 - `nix develop` enters a shell with Go, Flutter, infra tools, and `bin/` on `PATH`.
-- `dev` starts infra, backend, and frontend in tmux windows.
+- `dev` starts infra, backend, worker, and frontend in one process-compose session.
 - `start-infra` launches MinIO, RabbitMQ, and Caddy; follow with `source load-infra-env`.
-- `start-backend` runs the Go backend with hot reload.
-- `start-frontend` runs the Flutter web server on port 3000.
+- `start-backend` runs the Go backend with hot reload in the current terminal.
+- `start-frontend` runs the Flutter web server on port 3000 in the current terminal.
 - `cd backend && go test ./...` runs backend unit tests.
 - `cd frontend && flutter test` runs Flutter tests; `flutter analyze` runs Dart lints.
 - `nix build .#backend` builds backend binaries; `nix build .#frontend-web` builds the web app.

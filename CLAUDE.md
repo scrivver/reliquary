@@ -20,24 +20,24 @@ nix develop .#infra      # Infra only (MinIO + RabbitMQ + process-compose)
 ```
 
 The shell hook automatically:
-- Generates `process-compose.yaml` in `.data/` from `infra/minio.nix` and `infra/caddy.nix`
+- Generates `process-compose.yaml` and `dev-process-compose.yaml` in `.data/`
 - Exports `DATA_DIR`, `PC_SOCKET`, `MINIO_PORT_FILE`, `MINIO_CONSOLE_PORT_FILE`, `PROXY_PORT_FILE`
 - Adds `bin/` to PATH
 
 ## Infrastructure Commands
 
 ```bash
-dev                      # Start all services in tmux (requires tmux)
+dev                      # Start the full local stack via process-compose
 start-infra              # Start MinIO + RabbitMQ + Caddy via process-compose
 source load-infra-env    # Export MinIO, RabbitMQ, and proxy settings
-start-backend            # Start backend with hot reload in tmux window
-start-frontend           # Start Flutter web server in tmux window
-shutdown-infra           # Stop all services
+start-backend            # Start backend with hot reload in the current terminal
+start-frontend           # Start Flutter web server in the current terminal
+shutdown-infra           # Stop process-compose services
 ```
 
 ## Architecture
 
-- **`flake.nix`** — Dev shell definitions. Imports shell modules from `shells/` and generates the process-compose config at nix eval time using `pkgs.formats.yaml`.
+- **`flake.nix`** — Dev shell definitions. Imports shell modules from `shells/` and generates infra-only and full-stack process-compose configs at nix eval time using `pkgs.formats.yaml`.
 - **`shells/`** — Nix shell definitions. `infra.nix` is the base shell; `backend.nix` and `frontend.nix` extend it via `inputsFrom`.
 - **`backend/`** — Go API server (chi router, JWT auth, multipart upload, thumbnail generation).
   - `config/` — Environment-based configuration (MinIO, auth, JWT, worker pool).
@@ -55,7 +55,7 @@ shutdown-infra           # Stop all services
 - **`infra/minio.nix`** — Defines MinIO process-compose processes as a Nix attrset. Uses ephemeral ports (allocated via Python at runtime) and writes them to `$DATA_DIR/minio/port` and `$DATA_DIR/minio/console_port`. Includes a `minio-create-bucket` process that depends on MinIO being healthy.
 - **`infra/rabbitmq.nix`** — Declares the durable `engram.ingest` queue and direct-exchange binding.
 - **`infra/caddy.nix`** — Caddy reverse proxy process. Routes `/api/*` to the Go backend (unix socket) and `/storage/*` to MinIO. Handles CORS and strips duplicate MinIO CORS headers. Listens on port 2080 by default.
-- **`bin/`** — Shell scripts injected into PATH by the dev shell. Includes `dev` (tmux launcher), `start-backend`, `start-frontend`, `start-infra`, `load-infra-env`, `shutdown-infra`.
+- **`bin/`** — Shell scripts injected into PATH by the dev shell. Includes `dev` (full process-compose stack), `start-backend`, `start-frontend`, `start-infra`, `load-infra-env`, `shutdown-infra`.
 - **`.data/`** — Runtime directory (gitignored). Holds generated configs, MinIO data, Caddy config, port files, and the process-compose unix socket.
 
 ## Backend API
@@ -87,7 +87,7 @@ All endpoints except `/api/login` and `/api/health` require a `Bearer` JWT token
 ## Running Locally
 
 ```bash
-# Quick start (requires tmux)
+# Quick start
 nix develop
 dev
 

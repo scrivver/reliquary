@@ -10,10 +10,5 @@ source load-infra-env
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-tmux new-window -n thumbnail-worker 2>/dev/null \
-  || tmux new-session -d -s thumbnail-worker -n thumbnail-worker
-
-tmux send-keys -t thumbnail-worker \
-  "cd $PROJECT_ROOT/backend && go run ./cmd/reliquary-thumbnail-worker" Enter
-
-echo "Thumbnail worker started in tmux window 'thumbnail-worker'"
+cd "$PROJECT_ROOT/backend"
+exec go run ./cmd/reliquary-thumbnail-worker

@@ -12,9 +12,5 @@ export LISTEN_ADDR="$DATA_DIR/backend.sock"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-tmux new-window -n backend 2>/dev/null \
-  || tmux new-session -d -s backend -n backend
-
-tmux send-keys -t backend "cd $PROJECT_ROOT/backend && LISTEN_ADDR=$DATA_DIR/backend.sock MINIO_PORT=$MINIO_PORT air" Enter
-
-echo "Backend started in tmux window 'backend'"
+cd "$PROJECT_ROOT/backend"
+exec air

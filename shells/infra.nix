@@ -1,4 +1,4 @@
-{ pkgs, processComposeConfig }:
+{ pkgs, processComposeConfig, devProcessComposeConfig }:
 
 pkgs.mkShell {
   name = "reliquary-infra-shell";
@@ -16,6 +16,7 @@ pkgs.mkShell {
   shellHook = ''
     export SHELL=${pkgs.bash}/bin/bash
     export PATH="$PWD/bin:$PATH"
+    export PROJECT_ROOT="$PWD"
 
     export DATA_DIR="$PWD/.data"
     mkdir -p "$DATA_DIR"
@@ -26,6 +27,7 @@ pkgs.mkShell {
 
     # Generate process-compose config
     cp -f ${processComposeConfig} "$DATA_DIR/process-compose.yaml"
+    cp -f ${devProcessComposeConfig} "$DATA_DIR/dev-process-compose.yaml"
 
     # Process-compose unix socket path
     export PC_SOCKET="$DATA_DIR/process-compose.sock"
