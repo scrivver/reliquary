@@ -41,6 +41,47 @@ that make cold storage pleasant for personal use: uploads with duplicate
 detection, thumbnails, a searchable file explorer, per-user isolation, and simple
 storage analytics.
 
+## Architecture
+
+```mermaid
+flowchart LR
+  user[User]
+  native[Native Flutter app]
+
+  subgraph ingress[Public entrypoint]
+    web[Caddy + Flutter web]
+  end
+
+  subgraph app[Application services]
+    api[Go API]
+    worker[Thumbnail worker]
+  end
+
+  subgraph infra[Storage and queues]
+    s3[S3-compatible object storage]
+    mq[RabbitMQ]
+  end
+
+  user --> web
+  native --> api
+  web --> api
+
+  api --> s3
+  api --> mq
+  mq --> worker
+  worker --> s3
+
+  api -. presigned downloads .-> web
+  web -. /storage proxy .-> s3
+```
+
+The web deployment exposes Caddy as the public entrypoint. Caddy serves the
+Flutter web app, proxies API requests to the Go backend, and proxies presigned
+storage downloads. The API owns authentication, file metadata, uploads,
+deduplication, user isolation, and analytics. Background thumbnail work is
+published through RabbitMQ and processed by the worker, while file contents,
+thumbnails, indexes, and user data live in S3-compatible object storage.
+
 ## Features
 
 - Multi-file upload with progress tracking and SHA-256 duplicate detection
