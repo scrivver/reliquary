@@ -94,7 +94,9 @@ thumbnails, indexes, and user data live in S3-compatible object storage.
 
 ## Features
 
-- Multi-file upload with progress tracking and SHA-256 duplicate detection
+- Multi-file upload with progress tracking and SHA-256 duplicate detection, so
+  identical files are stored once and duplicate uploads are skipped even when the
+  filename is different
 - Thumbnail generation for images and videos
 - File explorer with search, sorting, details, preview, download, and delete
 - Storage analytics by file type and month
