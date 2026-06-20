@@ -12,6 +12,16 @@ Reliquary preserves what the world discards.
 
 > Artifacts stored in the Reliquary are rarely important. But importance changes with time.
 
+## Preview
+
+<p align="center">
+  <img src="docs/login-screen.png" alt="Reliquary login screen" width="760">
+</p>
+
+<p align="center">
+  <img src="docs/reliquary-ui-preview.png" alt="Reliquary file archive interface" width="760">
+</p>
+
 ## What is it for?
 
 Reliquary is for the files that do not need a full productivity suite around
