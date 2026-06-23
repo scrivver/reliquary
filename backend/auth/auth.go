@@ -26,9 +26,17 @@ type Service struct {
 	rateLimiter *RateLimiter
 }
 
+type Source string
+
+const (
+	SourcePassword Source = "password"
+	SourceOIDC     Source = "oidc"
+)
+
 type Claims struct {
 	Username string `json:"username"`
 	Role     Role   `json:"role"`
+	Source   Source `json:"source"`
 	jwt.RegisteredClaims
 }
 
@@ -76,6 +84,7 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	claims := &Claims{
 		Username: req.Username,
 		Role:     user.Role,
+		Source:   SourcePassword,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

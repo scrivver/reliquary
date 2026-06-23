@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"reliquary-be/config"
@@ -64,6 +65,20 @@ func TestLoginHandler_Success(t *testing.T) {
 	}
 	if resp.Role != "admin" {
 		t.Errorf("expected role admin, got %s", resp.Role)
+	}
+
+	parsed, err := jwt.ParseWithClaims(resp.Token, &Claims{}, func(t *jwt.Token) (any, error) {
+		return []byte(cfg.JWTSecret), nil
+	})
+	if err != nil {
+		t.Fatalf("failed to parse token: %v", err)
+	}
+	claims, ok := parsed.Claims.(*Claims)
+	if !ok {
+		t.Fatal("token claims are not *Claims")
+	}
+	if claims.Source != SourcePassword {
+		t.Errorf("expected source %q, got %q", SourcePassword, claims.Source)
 	}
 }
 
