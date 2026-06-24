@@ -60,7 +60,7 @@ Container configuration is provided through `.env` and consumed by
 | `MINIO_ROOT_USER` | `minioadmin` | MinIO root username |
 | `MINIO_ROOT_PASSWORD` | `change-me-in-production` | MinIO root password |
 | `MINIO_BUCKET` | `reliquary` | MinIO bucket name |
-| `AUTH_MODE` | `full` | Authentication mode: `full`, `proxy`, `none`, or `oidc` |
+| `AUTH_MODE` | `full` | Base authentication mode: `full`, `proxy`, `none`, or `oidc`. Combine with provider flags for mixed mode, e.g. `AUTH_MODE=oidc AUTH_PASSWORD_ENABLED=true` enables both OIDC and local password login. |
 | `AUTH_PASSWORD_ENABLED` | derived from `AUTH_MODE` | Enables password login; can be combined with OIDC |
 | `AUTH_OIDC_ENABLED` | derived from `AUTH_MODE` | Enables OIDC bearer-token auth and OIDC login UI |
 | `AUTH_PROXY_ENABLED` | derived from `AUTH_MODE` | Enables legacy trusted-header proxy auth |

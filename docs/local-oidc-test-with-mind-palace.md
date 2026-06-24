@@ -18,11 +18,15 @@ The root `bin/load-infra-env` exports:
 
 ```bash
 AUTH_MODE=oidc
+AUTH_PASSWORD_ENABLED=true
 OIDC_ISSUER_URL="$AUTHENTIK_URL/application/o/mind-palace/"
 OIDC_CLIENT_ID=mind-palace
 OIDC_REDIRECT_URI=com.reliquary.app://callback
 RELIQUARY_URL="http://localhost:$PROXY_PORT/api/reliquary"
 ```
+
+`AUTH_PASSWORD_ENABLED=true` enables mixed mode, so both password login and
+OIDC login are available in this dev setup.
 
 ## Run
 

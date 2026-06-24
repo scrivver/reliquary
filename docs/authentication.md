@@ -23,6 +23,27 @@ AUTH_PASSWORD_ENABLED=true
 AUTH_OIDC_ENABLED=true
 ```
 
+## Mixed Mode
+
+To let users sign in with either a local password or an external OIDC provider,
+use `AUTH_MODE=oidc` with password enabled, or `AUTH_MODE=full` with OIDC
+enabled:
+
+```env
+AUTH_MODE=oidc
+AUTH_PASSWORD_ENABLED=true
+JWT_SECRET=unique-random-secret
+AUTH_USERNAME=admin
+AUTH_PASSWORD=change-me-in-production
+
+OIDC_ISSUER_URL=https://auth.example.com/application/o/my-app/
+OIDC_CLIENT_ID=my-app
+```
+
+The frontend discovers both methods from `/api/auth/config` and shows both
+login options. API requests are accepted with either a Reliquary-issued JWT
+or a valid OIDC access token.
+
 ## Password Auth
 
 `AUTH_MODE=full` enables local username/password login with Reliquary-issued
