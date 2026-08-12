@@ -110,10 +110,12 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Backend listen address (path = unix socket) |
-| `AUTH_MODE` | `full` | Auth mode: `full` (JWT), `proxy` (trust header), `none` (single user) |
-| `AUTH_USERNAME` | `admin` | Initial admin username / default user for proxy/none modes |
+| `AUTH_MODE` | `full` | Auth mode: `full` (JWT), `proxy` (verified header), `none` (single user) |
+| `AUTH_USERNAME` | `admin` | Initial admin username / default user for none mode |
 | `AUTH_PASSWORD` | `admin` | Initial admin password (full mode only) |
 | `JWT_SECRET` | `reliquary-dev-secret-change-me` | JWT signing secret (full mode only) |
+| `AUTH_PROXY_SHARED_SECRET` | — | Secret the upstream proxy must send as `X-Reliquary-Proxy-Secret` (required in proxy mode) |
+| `AUTH_PROXY_INSECURE_TRUST_HEADER` | `false` | Opt out of the shared secret; only for an API reachable solely from the proxy |
 | `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Engram event broker |
 | `EVENT_QUEUE` | `engram.ingest` | Predeclared queue and routing key |
 | `EVENT_DEVICE_NAME` | `reliquary` | Canonical event producer name |

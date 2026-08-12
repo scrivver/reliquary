@@ -136,14 +136,32 @@ func main() {
 		})
 
 	case cfg.ProxyAuthEnabled && !cfg.PasswordAuthEnabled && !cfg.OIDCAuthEnabled:
-		// Proxy mode — trust X-Reliquary-User header.
-		slog.Info("proxy mode: trusting X-Reliquary-User header", "default_user", cfg.Username)
+		// Proxy mode — the upstream proxy asserts identity via X-Reliquary-User.
+		// Without a shared secret that header is attacker controlled, so refuse
+		// to start rather than silently serving every namespace to anyone who
+		// can reach the API.
+		if cfg.ProxySharedSecret == "" && !cfg.ProxyTrustHeaderInsecure {
+			slog.Error("proxy auth requires AUTH_PROXY_SHARED_SECRET; have the upstream " +
+				"proxy send it as X-Reliquary-Proxy-Secret, or set " +
+				"AUTH_PROXY_INSECURE_TRUST_HEADER=true if the API is reachable only from that proxy")
+			os.Exit(1)
+		}
+		if cfg.ProxySharedSecret == "" {
+			slog.Warn("proxy auth is trusting X-Reliquary-User without a shared secret; " +
+				"anyone who can reach the API directly can impersonate any user")
+		}
+		slog.Info("proxy mode: authenticating via X-Reliquary-User header", "verified", cfg.ProxySharedSecret != "")
 		r.Group(func(r chi.Router) {
-			r.Use(auth.ProxyMiddleware(cfg.Username))
+			r.Use(auth.ProxyMiddleware(cfg.ProxySharedSecret))
 			registerFileRoutes(r, h)
 		})
 
 	default:
+		if cfg.ProxyAuthEnabled {
+			slog.Warn("proxy auth is enabled but password or OIDC auth takes precedence; " +
+				"X-Reliquary-User will be ignored")
+		}
+
 		var authSvc *auth.Service
 		if cfg.PasswordAuthEnabled {
 			authSvc = auth.NewService(cfg, users)

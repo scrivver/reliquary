@@ -31,6 +31,10 @@ type Config struct {
 	Username            string
 	Password            string
 
+	// Proxy auth (AUTH_MODE=proxy)
+	ProxySharedSecret        string // required secret the upstream proxy must present
+	ProxyTrustHeaderInsecure bool   // opt out of the shared secret requirement
+
 	// OIDC (AUTH_MODE=oidc)
 	OIDCIssuerURL     string // e.g. "http://localhost:9000/application/o/mind-palace/"
 	OIDCClientID      string // expected aud claim
@@ -71,6 +75,9 @@ func Load() (*Config, error) {
 		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
 		Username:       envOr("AUTH_USERNAME", "admin"),
 		Password:       envOr("AUTH_PASSWORD", "admin"),
+
+		ProxySharedSecret:        envOr("AUTH_PROXY_SHARED_SECRET", ""),
+		ProxyTrustHeaderInsecure: envOrBool("AUTH_PROXY_INSECURE_TRUST_HEADER", false),
 
 		OIDCIssuerURL:     envOr("OIDC_ISSUER_URL", ""),
 		OIDCClientID:      envOr("OIDC_CLIENT_ID", ""),

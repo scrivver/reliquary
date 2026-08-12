@@ -331,6 +331,57 @@ func TestAuthCheckDeniesAnonymous(t *testing.T) {
 	}
 }
 
+// The edge download check runs under the same auth middleware as the API, so a
+// proxy-mode request without a verified identity must fail before Caddy ever
+// streams the object from MinIO.
+func TestAuthCheckUnderProxyAuthDeniesUnverifiedIdentity(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+	handler := auth.ProxyMiddleware("s3cret")(http.HandlerFunc(h.AuthCheck))
+
+	tests := []struct {
+		name   string
+		user   string
+		secret string
+	}{
+		{"no headers at all", "", ""},
+		{"identity without secret", "alice", ""},
+		{"identity with wrong secret", "alice", "guess"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+			req.Header.Set("X-Forwarded-Uri", "/storage/reliquary/files/alice/2026/06/report.pdf")
+			if tt.user != "" {
+				req.Header.Set("X-Reliquary-User", tt.user)
+			}
+			if tt.secret != "" {
+				req.Header.Set("X-Reliquary-Proxy-Secret", tt.secret)
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+
+			if res.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401 (body %s)", res.Code, res.Body.String())
+			}
+		})
+	}
+}
+
+func TestAuthCheckUnderProxyAuthAllowsVerifiedOwner(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+	req.Header.Set("X-Forwarded-Uri", "/storage/reliquary/files/alice/2026/06/report.pdf")
+	req.Header.Set("X-Reliquary-User", "alice")
+	req.Header.Set("X-Reliquary-Proxy-Secret", "s3cret")
+	res := httptest.NewRecorder()
+	auth.ProxyMiddleware("s3cret")(http.HandlerFunc(h.AuthCheck)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body %s)", res.Code, res.Body.String())
+	}
+}
+
 func TestEmitCreateUsesCanonicalS3Metadata(t *testing.T) {
 	emitter := &fakeEmitter{}
 	modified := time.Date(2026, 6, 15, 12, 0, 0, 0, time.FixedZone("MYT", 8*60*60))

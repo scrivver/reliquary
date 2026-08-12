@@ -64,6 +64,8 @@ Container configuration is provided through `.env` and consumed by
 | `AUTH_PASSWORD_ENABLED` | derived from `AUTH_MODE` | Enables password login; can be combined with OIDC |
 | `AUTH_OIDC_ENABLED` | derived from `AUTH_MODE` | Enables OIDC bearer-token auth and OIDC login UI |
 | `AUTH_PROXY_ENABLED` | derived from `AUTH_MODE` | Enables legacy trusted-header proxy auth |
+| `AUTH_PROXY_SHARED_SECRET` | - | Secret the upstream proxy must send as `X-Reliquary-Proxy-Secret`; required in proxy mode |
+| `AUTH_PROXY_INSECURE_TRUST_HEADER` | `false` | Opt out of the shared secret requirement; only safe when the API is reachable solely from the proxy |
 | `AUTH_NONE_ENABLED` | derived from `AUTH_MODE` | Enables no-auth single-user mode |
 | `AUTH_USERNAME` | `admin` | Initial admin username seeded on first startup |
 | `AUTH_PASSWORD` | `change-me-in-production` | Initial admin password seeded on first startup |
@@ -171,6 +173,31 @@ guarded at the proxy edge: Caddy runs an authenticated `forward_auth` check
 against the backend before proxying `/storage/*` to MinIO. Presigned URLs still
 provide per-request S3 signatures, but the edge check additionally requires a
 valid reliquary session/JWT that owns the object's key.
+
+### Proxy Auth Mode
+
+With `AUTH_MODE=proxy` the backend takes the caller's identity from the
+`X-Reliquary-User` header set by an upstream authenticating proxy
+(Authelia, oauth2-proxy, Cloudflare Access, and similar). That header is only
+meaningful if it provably came from that proxy, so the upstream must also send
+`AUTH_PROXY_SHARED_SECRET` as `X-Reliquary-Proxy-Secret`. Requests with a
+missing or mismatched secret, or with a missing or malformed username, are
+rejected with `401` — there is no fallback to `AUTH_USERNAME`.
+
+The backend refuses to start in proxy mode without a shared secret. If the API
+is genuinely unreachable except from the proxy (a unix socket, or an isolated
+container network), set `AUTH_PROXY_INSECURE_TRUST_HEADER=true` to accept the
+identity header unverified. In that configuration also strip inbound
+`X-Reliquary-User` at every hop in front of the backend, since anyone who can
+reach it directly can then impersonate any user.
+
+The same check guards `/storage/*`: the edge `forward_auth` call to
+`/api/auth/check` runs under this middleware, so an unverified request never
+reaches MinIO.
+
+Note that proxy auth only takes effect when password and OIDC auth are both
+disabled. If either is enabled, `X-Reliquary-User` is ignored and the backend
+logs a warning at startup.
 
 ### Start RabbitMQ
 
