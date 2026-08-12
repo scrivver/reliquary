@@ -20,9 +20,40 @@ All notable changes to Reliquary are documented in this file.
   `^[a-zA-Z0-9._-]{1,64}$` before it is used as an object key prefix, so a
   compromised or misconfigured upstream cannot escape a user's storage
   namespace.
+- **OIDC**: Access tokens are now verified against the issuer's signing keys and
+  must name Reliquary in their `aud` claim. Previously authentication was
+  delegated entirely to the provider's userinfo endpoint, which only answers
+  "this token is valid" and never "valid for Reliquary" — so **any** access
+  token the issuer had minted for **any** client registered with it
+  authenticated here as that user, through both the API and `/storage/*`
+  downloads. The expected audience defaults to `OIDC_CLIENT_ID` and can be
+  overridden with `OIDC_AUDIENCE` for providers that stamp something else.
+  Tokens failing verification are rejected outright; there is no userinfo
+  fallback, which would have restored the same hole. Userinfo is still used to
+  resolve the username when the verified token does not carry the claim.
+- **OIDC**: Opaque (non-JWT) access tokens carry no claims and cannot be
+  audience-checked, so they are now rejected unless
+  `OIDC_ALLOW_OPAQUE_TOKENS=true` is set explicitly. That flag restores the
+  previous behaviour and its exposure, and logs a warning at startup.
+- **OIDC**: Cached identities are capped at the access token's own `exp`. A
+  token could previously keep working for up to five minutes past expiry.
+
+### Added
+
+- **Docs**: [Identity Provider Configuration](docs/idp-configuration.md) — how to
+  read the issuer, audience, and username claim off a real token, plus
+  per-provider setup for Authentik, Keycloak, Authelia, and Zitadel.
 
 ### Changed
 
+- **BREAKING — OIDC**: The backend refuses to start with OIDC enabled unless
+  `OIDC_CLIENT_ID` (or `OIDC_AUDIENCE`) is set, or
+  `OIDC_ALLOW_OPAQUE_TOKENS=true` is given. Deployments that relied on
+  userinfo-only validation must now supply the audience their provider issues.
+  Most providers use the client ID, so setting `OIDC_CLIENT_ID` — already
+  required for the login flow — is usually enough. See
+  [Identity Provider Configuration](docs/idp-configuration.md) for how to
+  confirm the value and for per-provider setup.
 - **BREAKING — proxy auth**: The backend refuses to start with
   `AUTH_MODE=proxy` unless `AUTH_PROXY_SHARED_SECRET` is set. Configure the
   upstream proxy to send the secret, or set

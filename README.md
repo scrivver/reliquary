@@ -135,6 +135,7 @@ The app is available at `http://localhost:2080` by default.
 - [Development](docs/development.md)
 - [API Reference](docs/api-reference.md)
 - [Authentication](docs/authentication.md)
+- [Identity Provider Configuration](docs/idp-configuration.md)
 - [Split-Container Deployment](docs/split-container-deployment.md)
 
 ## Platforms

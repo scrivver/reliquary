@@ -37,9 +37,17 @@ type Config struct {
 
 	// OIDC (AUTH_MODE=oidc)
 	OIDCIssuerURL     string // e.g. "http://localhost:9000/application/o/mind-palace/"
-	OIDCClientID      string // expected aud claim
+	OIDCClientID      string // public client ID used for the PKCE code exchange
 	OIDCUsernameClaim string // JWT claim for username (default: preferred_username)
 	OIDCRedirectURI   string // native app redirect URI (default: com.reliquary.app://callback)
+
+	// OIDCAudience is the aud claim an access token must carry to be accepted.
+	// Defaults to OIDCClientID, which is what most providers stamp in. Without
+	// it any token the issuer minted for any client would authenticate here.
+	OIDCAudience string
+	// OIDCAllowOpaqueTokens accepts non-JWT access tokens, which carry no claims
+	// and therefore cannot be audience-checked.
+	OIDCAllowOpaqueTokens bool
 
 	// File events
 	EventsEnabled   bool
@@ -84,6 +92,9 @@ func Load() (*Config, error) {
 		OIDCUsernameClaim: envOr("OIDC_USERNAME_CLAIM", "preferred_username"),
 		OIDCRedirectURI:   envOr("OIDC_REDIRECT_URI", "com.reliquary.app://callback"),
 
+		OIDCAudience:          envOr("OIDC_AUDIENCE", ""),
+		OIDCAllowOpaqueTokens: envOrBool("OIDC_ALLOW_OPAQUE_TOKENS", false),
+
 		EventsEnabled:   envOrBool("EVENTS_ENABLED", true),
 		RabbitMQURL:     envOr("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672"),
 		EventQueue:      envOr("EVENT_QUEUE", "engram.ingest"),
@@ -94,6 +105,12 @@ func Load() (*Config, error) {
 		ThumbnailPrefetch:    envOrInt("THUMBNAIL_PREFETCH", 1),
 		ThumbnailConcurrency: envOrInt("THUMBNAIL_CONCURRENCY", 4),
 		ThumbnailMaxAttempts: envOrInt("THUMBNAIL_MAX_ATTEMPTS", 5),
+	}
+
+	// Most providers put the client ID in aud; OIDC_AUDIENCE only needs setting
+	// when the provider uses something else (Keycloak, Authelia).
+	if cfg.OIDCAudience == "" {
+		cfg.OIDCAudience = cfg.OIDCClientID
 	}
 
 	cfg.PasswordAuthEnabled = defaultAuthProviderEnabled("AUTH_PASSWORD_ENABLED", cfg.AuthMode == "full")

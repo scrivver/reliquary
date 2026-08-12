@@ -70,8 +70,10 @@ Container configuration is provided through `.env` and consumed by
 | `AUTH_USERNAME` | `admin` | Initial admin username seeded on first startup |
 | `AUTH_PASSWORD` | `change-me-in-production` | Initial admin password seeded on first startup |
 | `JWT_SECRET` | `change-me-in-production` | JWT signing secret; must be unique in production |
-| `OIDC_ISSUER_URL` | - | OIDC issuer URL |
-| `OIDC_CLIENT_ID` | - | Public OIDC client ID |
+| `OIDC_ISSUER_URL` | - | OIDC issuer URL; must match the `iss` claim exactly |
+| `OIDC_CLIENT_ID` | - | Public OIDC client ID; also the default expected audience |
+| `OIDC_AUDIENCE` | `OIDC_CLIENT_ID` | `aud` claim an access token must carry; see [IdP Configuration](idp-configuration.md) |
+| `OIDC_ALLOW_OPAQUE_TOKENS` | `false` | Accept non-JWT access tokens, which cannot be audience-checked |
 | `OIDC_REDIRECT_URI` | `com.reliquary.app://callback` | Native app redirect URI advertised to mobile clients |
 | `OIDC_USERNAME_CLAIM` | `preferred_username` | Userinfo claim used as Reliquary username |
 | `EVENTS_ENABLED` | `true` | Publish explicit file events for downstream consumers |

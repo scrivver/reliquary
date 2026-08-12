@@ -68,8 +68,16 @@ Relevant configuration:
 |----------|-------------|
 | `OIDC_ISSUER_URL` | OIDC issuer URL |
 | `OIDC_CLIENT_ID` | Public OIDC client ID used by the frontend |
+| `OIDC_AUDIENCE` | Expected `aud` claim; defaults to `OIDC_CLIENT_ID` |
+| `OIDC_ALLOW_OPAQUE_TOKENS` | Accept non-JWT access tokens, which cannot be audience-checked |
 | `OIDC_REDIRECT_URI` | Native app redirect URI advertised to mobile clients |
 | `OIDC_USERNAME_CLAIM` | Userinfo claim used as the Reliquary username |
+
+Access tokens are verified against the issuer's keys and must name Reliquary in
+their `aud` claim, so a token minted for a different application on the same
+provider is rejected. See
+[Identity Provider Configuration](idp-configuration.md) for how to find these
+values and for per-provider setup.
 
 When OIDC is used, user lifecycle and password management belong to the
 identity provider. Reliquary local-user management is intended for full auth
