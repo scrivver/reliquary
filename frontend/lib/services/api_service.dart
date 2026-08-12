@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import '../config.dart';
@@ -10,8 +12,10 @@ class ApiService {
   late final Dio _dio;
   late final String _origin;
 
-  // Cache presigned URLs for 10 minutes (they're valid for 15).
+  // Presigned URLs are valid for 15 minutes; cache them for 10.
   final Map<String, _CachedUrl> _urlCache = {};
+  // In-memory byte cache for previews so thumbnails are not re-downloaded.
+  final Map<String, _CachedBytes> _bytesCache = {};
   static const _cacheTtl = Duration(minutes: 10);
 
   ApiService(this._authService, {this.onUnauthorized}) {
@@ -93,35 +97,60 @@ class ApiService {
 
   /// Get a presigned download URL for a file or thumbnail.
   /// Results are cached for 10 minutes to avoid redundant API calls.
-  Future<String> presignDownload(String key) async {
-    final cached = _urlCache[key];
+  Future<String> presignDownload(String key, {bool forceDownload = false}) async {
+    final cacheKey = (forceDownload ? 'download:' : '') + key;
+    final cached = _urlCache[cacheKey];
     if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
       return cached.url;
     }
 
     final response = await _dio.get(
       '/api/files/presign',
-      queryParameters: {'key': key},
+      queryParameters: {'key': key, if (forceDownload) 'download': 'true'},
     );
     final relativePath = response.data['url'] as String;
     final url = _origin + relativePath;
 
-    _urlCache[key] = _CachedUrl(
+    _urlCache[cacheKey] = _CachedUrl(
       url: url,
       expiresAt: DateTime.now().add(_cacheTtl),
     );
     return url;
   }
 
-  /// Get a presigned download URL with content-disposition: attachment.
-  /// Forces the browser to download instead of displaying inline.
-  Future<String> presignDownloadForSave(String key) async {
-    final response = await _dio.get(
-      '/api/files/presign',
-      queryParameters: {'key': key, 'download': 'true'},
+  /// Fetch the raw bytes of a file or thumbnail.
+  ///
+  /// The request carries the Authorization header and is validated by Caddy's
+  /// forward_auth against [AuthCheck] before the bytes are streamed from
+  /// MinIO. Used for in-app previews; results are cached briefly.
+  Future<Uint8List> fetchContent(String key, {bool download = false}) async {
+    final cacheKey = (download ? 'download:' : '') + key;
+    final cached = _bytesCache[cacheKey];
+    if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+      return cached.bytes;
+    }
+
+    final url = await presignDownload(key, forceDownload: download);
+    final response = await _dio.getUri(
+      Uri.parse(url),
+      options: Options(responseType: ResponseType.bytes),
     );
-    final relativePath = response.data['url'] as String;
-    return _origin + relativePath;
+    final bytes = Uint8List.fromList(response.data as List<int>);
+
+    _bytesCache[cacheKey] = _CachedBytes(
+      bytes: bytes,
+      expiresAt: DateTime.now().add(_cacheTtl),
+    );
+    return bytes;
+  }
+
+  /// Save a single file to a local path (native).
+  ///
+  /// Streams through dio so the Authorization header is sent and the request
+  /// is validated at the proxy edge before MinIO serves the bytes.
+  Future<void> downloadToFile(String key, String savePath) async {
+    final url = await presignDownload(key, forceDownload: true);
+    await _dio.downloadUri(Uri.parse(url), savePath);
   }
 
   /// Delete an active file.
@@ -206,4 +235,11 @@ class _CachedUrl {
   final DateTime expiresAt;
 
   _CachedUrl({required this.url, required this.expiresAt});
+}
+
+class _CachedBytes {
+  final Uint8List bytes;
+  final DateTime expiresAt;
+
+  _CachedBytes({required this.bytes, required this.expiresAt});
 }

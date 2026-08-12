@@ -245,9 +245,89 @@ func TestUserOwnsKeyOnlyAllowsActiveNamespaces(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := userOwnsKey("alice", tt.key); got != tt.want {
-			t.Errorf("userOwnsKey(%q) = %v, want %v", tt.key, got, tt.want)
+		if got := UserOwnsKey("alice", tt.key); got != tt.want {
+			t.Errorf("UserOwnsKey(%q) = %v, want %v", tt.key, got, tt.want)
 		}
+	}
+}
+
+func TestObjectKeyFromStorageURI(t *testing.T) {
+	tests := []struct {
+		rawURI  string
+		bucket  string
+		want    string
+		wantErr bool
+	}{
+		{"/storage/reliquary/files/alice/2026/06/a.jpg?X-Amz-Signature=abc", "reliquary", "files/alice/2026/06/a.jpg", false},
+		{"/storage/reliquary/thumbs/alice/2026/06/a.jpg", "reliquary", "thumbs/alice/2026/06/a.jpg", false},
+		{"/storage/my%20bucket/files/alice/a%20b.txt", "my bucket", "files/alice/a b.txt", false},
+		{"/storage/files/alice/a.jpg", "", "files/alice/a.jpg", false},
+		{"/api/auth/check", "reliquary", "api/auth/check", false},
+		{"", "reliquary", "", true},
+	}
+	for _, tt := range tests {
+		got, err := objectKeyFromStorageURI(tt.rawURI, tt.bucket)
+		if tt.wantErr {
+			if err == nil {
+				t.Errorf("objectKeyFromStorageURI(%q) = %q, want error", tt.rawURI, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("objectKeyFromStorageURI(%q) unexpected error: %v", tt.rawURI, err)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("objectKeyFromStorageURI(%q) = %q, want %q", tt.rawURI, got, tt.want)
+		}
+	}
+}
+
+func TestAuthCheckAuthorizesOwnedKeys(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+	uri := "/storage/reliquary/files/alice/2026/06/report.pdf?X-Amz-Signature=xyz"
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+	req.Header.Set("X-Forwarded-Uri", uri)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.AuthCheck)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body %s)", res.Code, res.Body.String())
+	}
+}
+
+func TestAuthCheckDeniesOtherUsersKeys(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+	req.Header.Set("X-Forwarded-Uri", "/storage/reliquary/files/bob/2026/06/report.pdf")
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.AuthCheck)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", res.Code)
+	}
+}
+
+func TestAuthCheckRejectsMissingForwardedURI(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.AuthCheck)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", res.Code)
+	}
+}
+
+func TestAuthCheckDeniesAnonymous(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+	req.Header.Set("X-Forwarded-Uri", "/storage/reliquary/files/alice/2026/06/report.pdf")
+	res := httptest.NewRecorder()
+	h.AuthCheck(res, req)
+
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", res.Code)
 	}
 }
 

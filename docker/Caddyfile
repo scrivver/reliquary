@@ -17,6 +17,10 @@
 	}
 
 	handle /storage/* {
+		forward_auth api:8080 {
+			uri /api/auth/check
+		}
+
 		uri strip_prefix /storage
 		reverse_proxy minio:9000 {
 			header_up Host minio:9000

@@ -217,6 +217,8 @@ func registerFileRoutes(r chi.Router, h *handler.Handler) {
 	r.Post("/api/files/download", h.BatchDownload)
 	r.Delete("/api/files", h.DeleteFile)
 
+	r.Get("/api/auth/check", h.AuthCheck)
+
 	r.Get("/api/stats", h.Stats)
 }
 

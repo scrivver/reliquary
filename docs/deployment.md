@@ -164,8 +164,13 @@ MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
 
 mc alias set local http://127.0.0.1:9000 minioadmin minioadmin --api S3v4
 mc mb --ignore-existing local/reliquary
-mc anonymous set download local/reliquary
 ```
+
+The bucket must **not** have an anonymous download policy. Access to objects is
+guarded at the proxy edge: Caddy runs an authenticated `forward_auth` check
+against the backend before proxying `/storage/*` to MinIO. Presigned URLs still
+provide per-request S3 signatures, but the edge check additionally requires a
+valid reliquary session/JWT that owns the object's key.
 
 ### Start RabbitMQ
 
@@ -206,6 +211,11 @@ Create a `Caddyfile`:
   }
 
   handle /storage/* {
+    forward_auth unix//tmp/reliquary-backend.sock {
+      uri /api/auth/check
+      copy_headers Authorization
+    }
+
     uri strip_prefix /storage
     reverse_proxy 127.0.0.1:9000 {
       header_up Host 127.0.0.1:9000

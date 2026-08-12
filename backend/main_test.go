@@ -38,6 +38,21 @@ func TestArchiveRoutesAreNotRegistered(t *testing.T) {
 	}
 }
 
+func TestAuthCheckRouteIsRegistered(t *testing.T) {
+	router := chi.NewRouter()
+	registerFileRoutes(router, &handler.Handler{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	// Route exists; with an empty handler it fails key extraction, but must
+	// not 404 (404 would mean the edge auth endpoint is unreachable).
+	if res.Code == http.StatusNotFound {
+		t.Fatal("/api/auth/check route is not registered")
+	}
+}
+
 func TestAuthConfigHandler(t *testing.T) {
 	cfg := &config.Config{
 		PasswordAuthEnabled: true,

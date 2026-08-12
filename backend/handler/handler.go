@@ -59,6 +59,7 @@ type Handler struct {
 	events       event.Emitter
 	deviceName   string
 	proxyBaseURL string
+	bucket       string
 }
 
 func New(
@@ -77,6 +78,7 @@ func New(
 		events:       events,
 		deviceName:   cfg.EventDeviceName,
 		proxyBaseURL: cfg.ProxyBaseURL,
+		bucket:       cfg.MinIOBucket,
 	}
 }
 
@@ -264,7 +266,7 @@ func (h *Handler) PresignDownload(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
 		return
 	}
-	if !userOwnsKey(username, key) {
+	if !UserOwnsKey(username, key) {
 		httpError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -301,7 +303,7 @@ func (h *Handler) BatchDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, key := range req.Keys {
-		if !userOwnsKey(username, key) {
+		if !UserOwnsKey(username, key) {
 			httpError(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -349,7 +351,7 @@ func (h *Handler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "key query parameter is required", http.StatusBadRequest)
 		return
 	}
-	if !userOwnsKey(username, key) {
+	if !UserOwnsKey(username, key) {
 		httpError(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -799,9 +801,9 @@ func rekeyPrefix(key, from, to string) string {
 	return to + strings.TrimPrefix(key, from)
 }
 
-// userOwnsKey checks that key lives in one of the active owner-prefixed
+// UserOwnsKey checks that key lives in one of the active owner-prefixed
 // namespaces for username.
-func userOwnsKey(username, key string) bool {
+func UserOwnsKey(username, key string) bool {
 	if username == "" {
 		return false
 	}

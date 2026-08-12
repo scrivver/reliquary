@@ -81,16 +81,18 @@ flowchart LR
   mq --> worker
   worker --> s3
 
-  api -. presigned downloads .-> web
-  web -. /storage proxy .-> s3
+  web -. authenticated download .-> s3
 ```
 
 The web deployment exposes Caddy as the public entrypoint. Caddy serves the
-Flutter web app, proxies API requests to the Go backend, and proxies presigned
-storage downloads. The API owns authentication, file metadata, uploads,
+Flutter web app, proxies API requests to the Go backend, and proxies storage
+downloads. The API owns authentication, file metadata, uploads,
 deduplication, user isolation, and analytics. Background thumbnail work is
 published through RabbitMQ and processed by the worker, while file contents,
 thumbnails, indexes, and user data live in S3-compatible object storage.
+Every storage download is checked by Caddy's `forward_auth` against the
+backend before bytes are served, so presigned URLs cannot be used without a
+valid reliquary session owning the object.
 
 ## Features
 

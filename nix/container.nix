@@ -24,6 +24,11 @@ let
       }
 
       handle /storage/* {
+        forward_auth unix//run/reliquary/backend.sock {
+          uri /api/auth/check
+          copy_headers Authorization
+        }
+
         uri strip_prefix /storage
         reverse_proxy 127.0.0.1:9000 {
           header_up Host 127.0.0.1:9000

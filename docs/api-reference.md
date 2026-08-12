@@ -12,6 +12,7 @@ The API is served under `/api`.
 | `POST` | `/api/upload` | Yes | Multipart file upload with deduplication |
 | `GET` | `/api/files?offset=0&limit=50` | Yes | List files with pagination |
 | `GET` | `/api/files/presign?key=...&download=true` | Yes | Presigned download URL |
+| `GET` | `/api/auth/check` | Yes | Edge check for `/storage/*`: verifies identity and key ownership (invoked by Caddy `forward_auth`, not by the app) |
 | `DELETE` | `/api/files?key=...` | Yes | Delete file and thumbnail |
 | `GET` | `/api/stats` | Yes | User storage analytics |
 | `GET` | `/api/admin/stats` | Admin | Aggregate analytics |
@@ -37,6 +38,18 @@ File listing is served from per-user manifests at
 `indexes/{username}/files.json`. Normal `GET /api/files` requests do not call
 object-storage `ListObjects`. If a manifest is missing, the API rebuilds it
 once from object storage and then serves future requests from the manifest.
+
+## Download Authorization
+
+Presigned URLs are short-lived (15 minutes) but are not a security boundary by
+themselves: anyone who possesses one can read the object. Caddy runs a
+`forward_auth` check against `/api/auth/check` for every `/storage/*` request
+before proxying to MinIO. The check authenticates the request (JWT in
+`Authorization`, or whatever the active `AUTH_MODE` uses) and requires that the
+requested object key starts with the caller's namespace (`files/<user>/...`,
+`thumbs/<user>/...`). Responses: `204` allow, `400` malformed path, `403`
+denied. File bytes are never relayed through the Go backend for previews or
+single-file downloads; the backend only answers the small check request.
 
 ## Admin User Lifecycle
 

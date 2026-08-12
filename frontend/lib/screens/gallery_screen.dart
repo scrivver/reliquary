@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../models/file_item.dart';
@@ -188,8 +187,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _downloadFile(FileItem file) async {
     try {
-      final url = await widget.apiService.presignDownloadForSave(file.key);
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (kIsWeb) {
+        final bytes = await widget.apiService.fetchContent(
+          file.key,
+          download: true,
+        );
+        if (!mounted) return;
+        dl.triggerDownload(bytes, file.filename);
+      } else {
+        await dl.triggerDownload(widget.apiService, [file.key]);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -242,7 +249,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _viewFullImage(FileItem file) async {
     try {
-      final url = await widget.apiService.presignDownload(file.key);
+      final bytes = await widget.apiService.fetchContent(file.key);
       if (!mounted) return;
 
       Navigator.of(context).push(
@@ -261,19 +268,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.download),
-                  onPressed: () async {
-                    final downloadUrl = await widget.apiService
-                        .presignDownloadForSave(file.key);
-                    launchUrl(
-                      Uri.parse(downloadUrl),
-                      mode: LaunchMode.externalApplication,
-                    );
-                  },
+                  onPressed: () => _downloadFile(file),
                   tooltip: 'DOWNLOAD',
                 ),
               ],
             ),
-            body: Center(child: InteractiveViewer(child: Image.network(url))),
+            body: Center(
+              child: InteractiveViewer(child: Image.memory(bytes)),
+            ),
           ),
         ),
       );
@@ -429,12 +431,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
     if (kIsWeb) {
       if (keys.length == 1) {
-        // Single file on web — direct download.
+        // Single file on web — fetch bytes with auth header and save via blob.
         try {
-          final url = await widget.apiService.presignDownloadForSave(
+          final bytes = await widget.apiService.fetchContent(
             keys.first,
+            download: true,
           );
-          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          if (!mounted) return;
+          dl.triggerDownload(bytes, keys.first.split('/').last);
         } catch (e) {
           if (!mounted) return;
           ScaffoldMessenger.of(
@@ -471,10 +475,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     } else {
       // Native — save individual files to a picked directory.
       try {
-        await dl.triggerDownload(
-          keys,
-          (key) => widget.apiService.presignDownloadForSave(key),
-        );
+        await dl.triggerDownload(widget.apiService, keys);
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(
@@ -1962,7 +1963,7 @@ class _DesktopFileThumbnail extends StatefulWidget {
 }
 
 class _DesktopFileThumbnailState extends State<_DesktopFileThumbnail> {
-  String? _url;
+  Uint8List? _bytes;
 
   @override
   void initState() {
@@ -1984,18 +1985,18 @@ class _DesktopFileThumbnailState extends State<_DesktopFileThumbnail> {
     final previewKey =
         widget.file.thumbnailKey ?? (widget.file.isImage ? fileKey : null);
     if (previewKey == null) {
-      if (mounted) setState(() => _url = null);
+      if (mounted) setState(() => _bytes = null);
       return;
     }
 
-    setState(() => _url = null);
+    setState(() => _bytes = null);
     try {
-      final url = await widget.apiService.presignDownload(previewKey);
+      final bytes = await widget.apiService.fetchContent(previewKey);
       if (!mounted || widget.file.key != fileKey) return;
-      setState(() => _url = url);
+      setState(() => _bytes = bytes);
     } catch (_) {
       if (mounted && widget.file.key == fileKey) {
-        setState(() => _url = null);
+        setState(() => _bytes = null);
       }
     }
   }
@@ -2003,6 +2004,7 @@ class _DesktopFileThumbnailState extends State<_DesktopFileThumbnail> {
   @override
   Widget build(BuildContext context) {
     final tint = _tintForContentType(widget.file.contentType);
+    final bytes = _bytes;
     return ClipRRect(
       borderRadius: BorderRadius.circular(widget.borderRadius),
       child: Container(
@@ -2012,14 +2014,14 @@ class _DesktopFileThumbnailState extends State<_DesktopFileThumbnail> {
           color: tint.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(widget.borderRadius),
         ),
-        child: _url == null
+        child: bytes == null
             ? Icon(
                 _iconForContentType(widget.file.contentType),
                 color: tint,
                 size: widget.size * 0.55,
               )
-            : Image.network(
-                _url!,
+            : Image.memory(
+                bytes,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Icon(
                   _iconForContentType(widget.file.contentType),
@@ -2048,7 +2050,7 @@ class _DesktopFilePreview extends StatefulWidget {
 }
 
 class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
-  String? _url;
+  Uint8List? _bytes;
 
   @override
   void initState() {
@@ -2070,18 +2072,18 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
     final previewKey =
         widget.file.thumbnailKey ?? (widget.file.isImage ? fileKey : null);
     if (previewKey == null) {
-      if (mounted) setState(() => _url = null);
+      if (mounted) setState(() => _bytes = null);
       return;
     }
 
-    setState(() => _url = null);
+    setState(() => _bytes = null);
     try {
-      final url = await widget.apiService.presignDownload(previewKey);
+      final bytes = await widget.apiService.fetchContent(previewKey);
       if (!mounted || widget.file.key != fileKey) return;
-      setState(() => _url = url);
+      setState(() => _bytes = bytes);
     } catch (_) {
       if (mounted && widget.file.key == fileKey) {
-        setState(() => _url = null);
+        setState(() => _bytes = null);
       }
     }
   }
@@ -2089,6 +2091,7 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
   @override
   Widget build(BuildContext context) {
     final tint = _tintForContentType(widget.file.contentType);
+    final bytes = _bytes;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -2098,7 +2101,7 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
           border: Border.all(color: _kBorder),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: _url == null
+        child: bytes == null
             ? Center(
                 child: Icon(
                   _iconForContentType(widget.file.contentType),
@@ -2106,8 +2109,8 @@ class _DesktopFilePreviewState extends State<_DesktopFilePreview> {
                   color: tint,
                 ),
               )
-            : Image.network(
-                _url!,
+            : Image.memory(
+                bytes,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => Center(
                   child: Icon(
@@ -2133,7 +2136,7 @@ class _PreviewModalContent extends StatefulWidget {
 }
 
 class _PreviewModalContentState extends State<_PreviewModalContent> {
-  String? _url;
+  Uint8List? _bytes;
   Object? _error;
 
   @override
@@ -2153,14 +2156,14 @@ class _PreviewModalContentState extends State<_PreviewModalContent> {
   Future<void> _loadImage() async {
     final fileKey = widget.file.key;
     setState(() {
-      _url = null;
+      _bytes = null;
       _error = null;
     });
 
     try {
-      final url = await widget.apiService.presignDownload(fileKey);
+      final bytes = await widget.apiService.fetchContent(fileKey);
       if (!mounted || widget.file.key != fileKey) return;
-      setState(() => _url = url);
+      setState(() => _bytes = bytes);
     } catch (e) {
       if (!mounted || widget.file.key != fileKey) return;
       setState(() => _error = e);
@@ -2189,25 +2192,21 @@ class _PreviewModalContentState extends State<_PreviewModalContent> {
       );
     }
 
-    final url = _url;
-    if (url == null) {
+    final bytes = _bytes;
+    if (bytes == null) {
       return const CircularProgressIndicator(color: _kPrimary);
     }
 
     if (widget.file.isPdf) {
-      return PdfPreviewFrame(url: url);
+      return PdfPreviewFrame(bytes: bytes, sourceName: widget.file.key);
     }
 
     return InteractiveViewer(
       minScale: 0.5,
       maxScale: 5,
-      child: Image.network(
-        url,
+      child: Image.memory(
+        bytes,
         fit: BoxFit.contain,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return const CircularProgressIndicator(color: _kPrimary);
-        },
         errorBuilder: (_, _, _) => Column(
           mainAxisSize: MainAxisSize.min,
           children: [

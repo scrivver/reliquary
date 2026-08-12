@@ -32,6 +32,11 @@
           }
 
           handle /storage/* {
+            forward_auth unix/$BACKEND_SOCK {
+              uri /api/auth/check
+              copy_headers Authorization
+            }
+
             uri strip_prefix /storage
             reverse_proxy 127.0.0.1:''${MINIO_PORT} {
               header_up Host 127.0.0.1:''${MINIO_PORT}
@@ -45,8 +50,8 @@
 
         echo "$PROXY_PORT" > "$CADDY_DIR/port"
         echo "Caddy proxy starting on :$PROXY_PORT"
-        echo "  /api/*     -> unix/$BACKEND_SOCK"
-        echo "  /storage/* -> 127.0.0.1:$MINIO_PORT"
+        echo "  /api/*       -> unix/$BACKEND_SOCK"
+        echo "  /storage/*   -> auth check (unix/$BACKEND_SOCK) then 127.0.0.1:$MINIO_PORT"
 
         exec ${pkgs.caddy}/bin/caddy run --config "$CADDY_DIR/Caddyfile"
       '';

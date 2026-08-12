@@ -68,7 +68,8 @@ you want the full local stack.
 The Caddy reverse proxy runs on `http://localhost:2080` and routes:
 
 - `/api/*` to the Go backend over a Unix socket
-- `/storage/*` to MinIO for presigned file downloads
+- `/storage/*` through an authenticated `forward_auth` check (`/api/auth/check`)
+  to MinIO for presigned file downloads
 
 ## Backend
 
