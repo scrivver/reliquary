@@ -93,7 +93,7 @@ deployment.
 | `MINIO_ROOT_PASSWORD` | `minio`, `minio-init`, `api`, `thumbnail-worker` | `change-me-in-production` | MinIO root/secret key. |
 | `MINIO_BUCKET` | `minio-init`, `api`, `thumbnail-worker` | `reliquary` | Bucket created on startup and used by Reliquary. |
 | `AUTH_MODE` | `api` | `full` | Authentication mode: `full`, `proxy`, `none`, or `oidc`. |
-| `AUTH_PASSWORD_ENABLED` | `api` | derived from `AUTH_MODE` | Enables password login; can be combined with OIDC. |
+| `AUTH_PASSWORD_ENABLED` | `api` | derived from `AUTH_MODE` | Enables password login; cannot be combined with OIDC. |
 | `AUTH_OIDC_ENABLED` | `api` | derived from `AUTH_MODE` | Enables OIDC bearer-token auth and OIDC login UI. |
 | `AUTH_PROXY_ENABLED` | `api` | derived from `AUTH_MODE` | Enables legacy trusted-header proxy auth. |
 | `AUTH_NONE_ENABLED` | `api` | derived from `AUTH_MODE` | Enables no-auth single-user mode. |

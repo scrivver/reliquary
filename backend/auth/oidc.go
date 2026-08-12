@@ -180,6 +180,10 @@ func (o *OIDCAuthenticator) authenticate(ctx context.Context, token string) (str
 		return "", time.Time{}, fmt.Errorf("parse token claims: %w", err)
 	}
 	if username, ok := claims[o.usernameClaim].(string); ok && username != "" {
+		if !ValidUsername(username) {
+			return "", time.Time{}, fmt.Errorf("claim %q is not usable as a storage namespace: %q",
+				o.usernameClaim, username)
+		}
 		return username, idToken.Expiry, nil
 	}
 
@@ -247,6 +251,12 @@ func (o *OIDCAuthenticator) fetchUserinfo(ctx context.Context, token string) (st
 	username, ok := claims[o.usernameClaim].(string)
 	if !ok || username == "" {
 		return "", fmt.Errorf("userinfo missing claim %q", o.usernameClaim)
+	}
+	// The provider is trusted to say who the user is, not to supply a value
+	// that is safe to interpolate into an object key.
+	if !ValidUsername(username) {
+		return "", fmt.Errorf("claim %q is not usable as a storage namespace: %q",
+			o.usernameClaim, username)
 	}
 
 	return username, nil

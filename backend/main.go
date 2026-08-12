@@ -162,6 +162,17 @@ func main() {
 				"X-Reliquary-User will be ignored")
 		}
 
+		// Password and OIDC identities share one flat namespace: both map a
+		// bare username onto files/<username>/. Running them together lets an
+		// OIDC identity named "admin" reach the local admin's files, so the
+		// combination is refused rather than silently merged.
+		if cfg.PasswordAuthEnabled && cfg.OIDCAuthEnabled {
+			slog.Error("password and OIDC auth cannot be enabled together: both map usernames " +
+				"onto the same storage namespace, so an OIDC identity could claim a local " +
+				"user's files; enable exactly one of AUTH_PASSWORD_ENABLED and AUTH_OIDC_ENABLED")
+			os.Exit(1)
+		}
+
 		var authSvc *auth.Service
 		if cfg.PasswordAuthEnabled {
 			authSvc = auth.NewService(cfg, users)

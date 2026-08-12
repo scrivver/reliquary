@@ -215,10 +215,25 @@ for an OIDC identity and its local user management (`/api/admin/users`) is
 intended for `AUTH_MODE=full`.
 
 OIDC identities are always assigned the `user` role — group and role claims are
-not mapped. Administrative access requires a local admin account, which means
-running mixed mode:
+not mapped — and the `/api/admin/*` endpoints are not registered in OIDC mode at
+all. There is no administrative access in an OIDC deployment; enabling password
+auth alongside it to get an admin account is refused at startup, because the two
+providers would share one storage namespace. See
+[Authentication](authentication.md#one-provider-at-a-time).
 
-```env
-AUTH_MODE=oidc
-AUTH_PASSWORD_ENABLED=true
-```
+### Username Stability
+
+The claim named by `OIDC_USERNAME_CLAIM` becomes the user's storage namespace
+(`files/<username>/`). It must therefore be stable for the life of the account:
+
+- Renaming a user at the provider makes their existing files unreachable.
+- Reusing a freed username gives the new holder the previous holder's archive.
+
+`preferred_username` is the default because it is readable, but most providers
+allow it to change. If yours does, either prevent renames operationally or point
+`OIDC_USERNAME_CLAIM` at an immutable claim such as `sub` — at the cost of
+namespaces named after opaque identifiers.
+
+Usernames must match `^[a-zA-Z0-9._-]{1,64}$`; anything else is rejected at
+login rather than interpolated into an object key. Note this excludes email
+addresses, so `email` is not usable as the username claim.

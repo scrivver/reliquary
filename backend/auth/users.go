@@ -86,6 +86,10 @@ func (s *UserStore) Seed(ctx context.Context, username, password string) error {
 
 // Create adds a new user.
 func (s *UserStore) Create(ctx context.Context, username, password string, role Role) error {
+	if !ValidUsername(username) {
+		return fmt.Errorf("username %q must be 1-64 characters of letters, digits, dot, dash or underscore", username)
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)

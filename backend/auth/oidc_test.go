@@ -293,6 +293,35 @@ func TestOIDCFallsBackToUserinfoForMissingUsernameClaim(t *testing.T) {
 	}
 }
 
+// The provider is trusted to say who the user is, not to hand over a value
+// that is safe to splice into an object key.
+func TestOIDCRejectsUnsafeUsernameClaim(t *testing.T) {
+	unsafe := []string{"../admin", "alice/../bob", "alice/", "alice bob"}
+
+	for _, username := range unsafe {
+		t.Run(username, func(t *testing.T) {
+			idp := newTestIdP(t)
+			o := idp.authenticator(t, "reliquary", false)
+
+			// Once via the access token's own claim...
+			token := idp.sign(t, jwt.MapClaims{
+				"aud":                "reliquary",
+				"preferred_username": username,
+			})
+			if _, err := o.AuthenticateRequest(bearerRequest(t, token)); err == nil {
+				t.Error("unsafe username in token claim was accepted")
+			}
+
+			// ...and once via the userinfo fallback.
+			claimless := idp.sign(t, jwt.MapClaims{"aud": "reliquary", "sub": "user-1"})
+			idp.userinfo[claimless] = username
+			if _, err := o.AuthenticateRequest(bearerRequest(t, claimless)); err == nil {
+				t.Error("unsafe username from userinfo was accepted")
+			}
+		})
+	}
+}
+
 func TestLooksLikeJWT(t *testing.T) {
 	idp := newTestIdP(t)
 	signed := idp.sign(t, jwt.MapClaims{"aud": "reliquary"})

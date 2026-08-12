@@ -5,18 +5,12 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"net/http"
-	"regexp"
 )
 
 const (
 	proxyUserHeader   = "X-Reliquary-User"
 	proxySecretHeader = "X-Reliquary-Proxy-Secret"
 )
-
-// validProxyUsername constrains the asserted identity. The value becomes an
-// object key prefix (files/<username>/), so anything that could alter the
-// storage namespace — path separators, dot segments, whitespace — is rejected.
-var validProxyUsername = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
 
 // ProxyMiddleware authenticates using the identity asserted by a trusted
 // upstream proxy in the X-Reliquary-User header.
@@ -43,7 +37,7 @@ func ProxyMiddleware(sharedSecret string) func(http.Handler) http.Handler {
 			}
 
 			username := r.Header.Get(proxyUserHeader)
-			if !validProxyUsername.MatchString(username) {
+			if !ValidUsername(username) {
 				slog.Warn("proxy auth denied: missing or invalid user header", "remote", r.RemoteAddr)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return

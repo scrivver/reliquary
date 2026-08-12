@@ -37,6 +37,18 @@ All notable changes to Reliquary are documented in this file.
   previous behaviour and its exposure, and logs a warning at startup.
 - **OIDC**: Cached identities are capped at the access token's own `exp`. A
   token could previously keep working for up to five minutes past expiry.
+- **Auth**: Password and OIDC auth can no longer be enabled together. Both map a
+  bare username onto the same flat storage namespace (`files/<username>/`) with
+  no record of the provider an identity came from, so an OIDC identity whose
+  username happened to be `admin` addressed the local admin's files and passed
+  every ownership check, including the `/storage/*` edge check. Enabling both
+  now fails at startup.
+- **Auth**: Usernames are validated against `^[a-zA-Z0-9._-]{1,64}$` wherever an
+  identity enters the system — local account creation, the OIDC username claim
+  (from the access token and from userinfo), and the proxy identity header.
+  Previously only the proxy header was checked, so an identity provider that
+  permits `/` in the username claim, or an admin creating a user named
+  `../admin`, could address object keys outside that user's namespace.
 
 ### Added
 
@@ -54,6 +66,12 @@ All notable changes to Reliquary are documented in this file.
   required for the login flow — is usually enough. See
   [Identity Provider Configuration](docs/idp-configuration.md) for how to
   confirm the value and for per-provider setup.
+- **BREAKING — mixed auth mode**: `AUTH_MODE=oidc` with
+  `AUTH_PASSWORD_ENABLED=true` (and the reverse) is no longer supported and now
+  refuses to start. Mixed mode was documented in v0.3.0; use password auth or
+  OIDC alone. Because `/api/admin/*` is only registered when password auth is
+  enabled, this means OIDC deployments have no admin endpoints, including
+  aggregate storage analytics.
 - **BREAKING — proxy auth**: The backend refuses to start with
   `AUTH_MODE=proxy` unless `AUTH_PROXY_SHARED_SECRET` is set. Configure the
   upstream proxy to send the secret, or set

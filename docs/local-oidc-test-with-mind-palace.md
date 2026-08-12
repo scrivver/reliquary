@@ -18,15 +18,22 @@ The root `bin/load-infra-env` exports:
 
 ```bash
 AUTH_MODE=oidc
-AUTH_PASSWORD_ENABLED=true
 OIDC_ISSUER_URL="$AUTHENTIK_URL/application/o/mind-palace/"
 OIDC_CLIENT_ID=mind-palace
 OIDC_REDIRECT_URI=com.reliquary.app://callback
 RELIQUARY_URL="http://localhost:$PROXY_PORT/api/reliquary"
 ```
 
-`AUTH_PASSWORD_ENABLED=true` enables mixed mode, so both password login and
-OIDC login are available in this dev setup.
+> **The root `bin/load-infra-env` also exports `AUTH_PASSWORD_ENABLED=true`,
+> which the backend now refuses to start with.** Password and OIDC auth can no
+> longer run together — see
+> [Authentication](authentication.md#one-provider-at-a-time). Drop that export
+> from the root repository's `bin/load-infra-env` for this dev setup to start.
+
+`OIDC_CLIENT_ID` doubles as the expected `aud` claim. It is also the Authentik
+application slug in this setup, so a decoded token's `aud` of `mind-palace`
+cannot distinguish the two — see
+[Identity Provider Configuration](idp-configuration.md).
 
 ## Run
 
@@ -87,6 +94,8 @@ akadmin / mind-palace-admin
   cross-origin discovery or token requests.
 - This test path validates the standalone Reliquary frontend's OIDC button,
   PKCE redirect flow, token exchange, bearer-token API calls, and backend
-  userinfo validation.
+  access-token verification.
 - It does not test password login; use a Reliquary-only `AUTH_MODE=full`
-  deployment for that path.
+  deployment for that path. The two cannot be enabled in one deployment.
+- Admin endpoints are not registered in OIDC mode, so this setup exercises the
+  file APIs only.

@@ -15,34 +15,29 @@ The frontend discovers enabled login methods from:
 GET /api/auth/config
 ```
 
-`AUTH_MODE` keeps existing deployments working. Provider flags can enable
-combined modes, for example password login and OIDC login together:
+`AUTH_MODE` keeps existing deployments working, and the provider flags
+(`AUTH_PASSWORD_ENABLED`, `AUTH_OIDC_ENABLED`, `AUTH_PROXY_ENABLED`,
+`AUTH_NONE_ENABLED`) override what it implies.
 
-```env
-AUTH_PASSWORD_ENABLED=true
-AUTH_OIDC_ENABLED=true
-```
+## One Provider At A Time
 
-## Mixed Mode
+Password and OIDC auth **cannot be enabled together**; the backend refuses to
+start if both are on.
 
-To let users sign in with either a local password or an external OIDC provider,
-use `AUTH_MODE=oidc` with password enabled, or `AUTH_MODE=full` with OIDC
-enabled:
+Both map a bare username onto the same flat storage namespace —
+`files/<username>/` and friends — with no record of which provider an identity
+came from. Run them side by side and an OIDC identity whose username happens to
+be `admin` addresses the local admin's files, and is authorized for them by
+every ownership check including the `/storage/*` edge check. Keeping exactly one
+provider active means a namespace has exactly one claimant.
 
-```env
-AUTH_MODE=oidc
-AUTH_PASSWORD_ENABLED=true
-JWT_SECRET=unique-random-secret
-AUTH_USERNAME=admin
-AUTH_PASSWORD=change-me-in-production
+The same reasoning already applies to proxy auth, which only takes effect when
+password and OIDC auth are both disabled.
 
-OIDC_ISSUER_URL=https://auth.example.com/application/o/my-app/
-OIDC_CLIENT_ID=my-app
-```
-
-The frontend discovers both methods from `/api/auth/config` and shows both
-login options. API requests are accepted with either a Reliquary-issued JWT
-or a valid OIDC access token.
+Note that this also holds **across** a deployment's lifetime, where the backend
+cannot enforce it: switching a running deployment from password auth to OIDC
+hands `files/alice/` to whichever `alice` the identity provider supplies. Move
+or delete the existing namespaces first if the two are different people.
 
 ## Password Auth
 
@@ -81,7 +76,14 @@ values and for per-provider setup.
 
 When OIDC is used, user lifecycle and password management belong to the
 identity provider. Reliquary local-user management is intended for full auth
-mode.
+mode, and the `/api/admin/*` endpoints are **not registered** in OIDC mode —
+including aggregate storage analytics. Group and role claims are not mapped, so
+every OIDC identity gets the `user` role.
+
+The username claim becomes the user's storage namespace, so it must be stable:
+renaming a user at the provider makes their existing files unreachable, and
+reusing a freed username hands the new holder the previous holder's archive.
+Prefer a claim the provider guarantees never changes.
 
 ## Proxy Auth
 
