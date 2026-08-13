@@ -161,12 +161,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  /// A password can only be changed where Reliquary is the one holding it.
+  bool get _canChangePassword =>
+      _username != null && _provider == 'password' && widget.apiService != null;
+
+  /// An OIDC session has no Reliquary-side password: the credential lives in
+  /// the identity provider, and `/api/users/me/password` is not even served.
+  bool get _isOidcSession => _provider == 'oidc';
+
   Widget _buildMobileBody() {
-    final canChangePassword =
-        _username != null &&
-        _provider == 'password' &&
-        widget.apiService != null;
-    final hasSettings = !isWebBuild || canChangePassword;
+    final hasSettings = !isWebBuild || _canChangePassword || _isOidcSession;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -182,7 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
 
         // Change password section
-        if (canChangePassword) ...[
+        if (_canChangePassword) ...[
           if (!isWebBuild) const SizedBox(height: 16),
           _ConfigPanel(
             icon: Icons.lock_reset,
@@ -191,6 +195,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: _changePasswordFields(),
             ),
+          ),
+        ] else if (_isOidcSession) ...[
+          if (!isWebBuild) const SizedBox(height: 16),
+          _ConfigPanel(
+            icon: Icons.shield_outlined,
+            title: 'Security Credentials',
+            child: _ExternalCredentialsLabel(username: _username),
           ),
         ],
         if (!hasSettings) ...[
@@ -208,9 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildDesktopBody() {
     final sections = <Widget>[];
 
-    if (_username != null &&
-        _provider == 'password' &&
-        widget.apiService != null) {
+    if (_canChangePassword) {
       sections.add(
         _ConfigPanel(
           icon: Icons.lock_reset,
@@ -219,6 +228,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: _changePasswordFields(),
           ),
+        ),
+      );
+    } else if (_isOidcSession) {
+      sections.add(
+        _ConfigPanel(
+          icon: Icons.shield_outlined,
+          title: 'Security Credentials',
+          child: _ExternalCredentialsLabel(username: _username),
         ),
       );
     }
@@ -458,6 +475,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: _kPrimary),
       ),
+    );
+  }
+}
+
+/// Shown in place of the change-password form for sessions whose credential is
+/// held elsewhere. Without it the panel simply vanishes under SSO, which reads
+/// as a missing feature rather than as a deliberate boundary.
+class _ExternalCredentialsLabel extends StatelessWidget {
+  final String? username;
+
+  const _ExternalCredentialsLabel({this.username});
+
+  @override
+  Widget build(BuildContext context) {
+    // The username is best-effort under OIDC: it is resolved from the
+    // provider's userinfo endpoint after the token exchange, which can fail.
+    final signedIn = username == null
+        ? 'Signed in via SSO.'
+        : 'Signed in as $username via SSO.';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          signedIn,
+          style: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            height: 20 / 14,
+            fontWeight: FontWeight.w600,
+            color: _kText,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Password changes are handled by your identity provider, '
+          'not Reliquary.',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            height: 20 / 14,
+            color: _kSecondary,
+          ),
+        ),
+      ],
     );
   }
 }
