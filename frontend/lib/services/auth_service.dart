@@ -111,7 +111,7 @@ class AuthService {
         return false;
       }
 
-      return _exchangeOidcCode(
+      return await _exchangeOidcCode(
         issuer: oidc.issuerUrl,
         clientId: oidc.clientId,
         code: result.code,
