@@ -11,11 +11,16 @@ class LoginScreen extends StatefulWidget {
   final AuthConfig authConfig;
   final VoidCallback onAuthenticated;
 
+  /// Explains an involuntary sign-out, so an expired session does not look
+  /// like the app forgetting the user for no reason.
+  final String? notice;
+
   const LoginScreen({
     super.key,
     required this.authService,
     required this.authConfig,
     required this.onAuthenticated,
+    this.notice,
   });
 
   @override
@@ -28,6 +33,13 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loadingPassword = false;
   bool _loadingOidc = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Cleared by the first login attempt, like any other message here.
+    _error = widget.notice;
+  }
 
   Future<void> _loginPassword() async {
     setState(() {

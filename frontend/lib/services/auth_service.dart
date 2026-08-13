@@ -160,15 +160,57 @@ class AuthService {
     }
   }
 
+  /// Treat a token as spent slightly before its deadline, so a request is not
+  /// sent with a token that expires while it is in flight.
+  static const _expiryLeeway = Duration(seconds: 30);
+
+  /// Expiry read from a token's `exp` claim, or null when there is nothing to
+  /// read: the token is not a JWT, or carries no `exp`.
+  ///
+  /// A null result means "unknown", never "expired". OIDC providers may issue
+  /// opaque access tokens, which carry no readable claims at all; those are
+  /// used until the server rejects them.
+  static DateTime? tokenExpiry(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) return null;
+    try {
+      final payload = json.decode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      final exp = (payload as Map<String, dynamic>)['exp'];
+      if (exp is! int) return null;
+      return DateTime.fromMillisecondsSinceEpoch(exp * 1000, isUtc: true);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _isExpired(String token) {
+    final expiry = tokenExpiry(token);
+    if (expiry == null) return false;
+    return DateTime.now().toUtc().isAfter(expiry.subtract(_expiryLeeway));
+  }
+
+  /// The token to send, or null when the session cannot be used.
+  ///
+  /// Expiry is checked here rather than left to the server, so an OIDC session
+  /// renews before the request instead of after a failure, and a password
+  /// session — which has no renewal path — reports itself as over rather than
+  /// sending a token that is certain to be rejected.
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_tokenKey);
-    if (token != null) return token;
+    if (token != null && !_isExpired(token)) return token;
     if (await _refreshOidcToken()) {
       return prefs.getString(_tokenKey);
     }
     return null;
   }
+
+  /// Attempts to renew the session in place. Only OIDC sessions can be
+  /// renewed: password logins have no refresh token and the API issues
+  /// replacements only at login.
+  Future<bool> tryRefreshSession() => _refreshOidcToken();
 
   Future<String?> getUsername() async {
     final prefs = await SharedPreferences.getInstance();
@@ -246,7 +288,19 @@ class AuthService {
     return true;
   }
 
-  Future<bool> _refreshOidcToken() async {
+  /// Shared by everything waiting on the same renewal. A screen issues several
+  /// requests at once, so an expired token would otherwise start a refresh per
+  /// request — and a provider that rotates refresh tokens invalidates the
+  /// token the moment the first one lands, failing all the rest.
+  Future<bool>? _refreshInFlight;
+
+  Future<bool> _refreshOidcToken() {
+    return _refreshInFlight ??= _performOidcRefresh().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  Future<bool> _performOidcRefresh() async {
     final prefs = await SharedPreferences.getInstance();
     final provider = prefs.getString(_providerKey);
     final refreshToken = prefs.getString(_refreshTokenKey);

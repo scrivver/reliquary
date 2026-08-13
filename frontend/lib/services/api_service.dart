@@ -32,6 +32,11 @@ class ApiService {
         },
         onError: (error, handler) async {
           if (error.response?.statusCode == 401) {
+            final retried = await _retryAfterRefresh(error.requestOptions);
+            if (retried != null) {
+              handler.resolve(retried);
+              return;
+            }
             await _authService.logout();
             onUnauthorized?.call();
           }
@@ -39,6 +44,32 @@ class ApiService {
         },
       ),
     );
+  }
+
+  /// Marks a request that has already been through one refresh, so a token the
+  /// server keeps rejecting cannot drive an endless refresh/retry loop.
+  static const _retriedKey = 'reliquary_retried_after_refresh';
+
+  /// Renews the session and replays the request, or null if that is not
+  /// possible — in which case the caller signs the user out.
+  ///
+  /// A password session has nothing to renew and fails here immediately. A
+  /// multipart body cannot be replayed because its stream is already consumed,
+  /// so uploads are not retried; the refresh still stands and the user only
+  /// has to pick the files again.
+  Future<Response<dynamic>?> _retryAfterRefresh(RequestOptions options) async {
+    if (options.extra[_retriedKey] == true || options.data is FormData) {
+      return null;
+    }
+    if (!await _authService.tryRefreshSession()) return null;
+
+    options.extra[_retriedKey] = true;
+    try {
+      // Goes back through the interceptors, so the renewed token is attached.
+      return await _dio.fetch(options);
+    } on DioException {
+      return null;
+    }
   }
 
   /// Upload a file through the Go backend (multipart).

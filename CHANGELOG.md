@@ -88,6 +88,29 @@ All notable changes to Reliquary are documented in this file.
   permits `/` in the username claim, or an admin creating a user named
   `../admin`, could address object keys outside that user's namespace.
 
+### Fixed
+
+- **Frontend**: An expired session no longer strands the user on a screen that
+  cannot load. The `401` handler was an empty method deferring to a handler
+  that was never written, so the token was cleared but nothing navigated: the
+  screen showed a raw error, and every later request went out with no
+  credential at all and failed too. Only a full page reload recovered. The app
+  now returns to the login screen with "Your session expired. Please sign in
+  again." This also covers sessions ended by a password change or a
+  deactivation, which the API rejects the same way.
+- **Frontend**: The stored token's `exp` is now checked before it is used, so a
+  session that expired while the app was closed goes straight to the login
+  screen instead of admitting the user and failing every request behind it.
+  Tokens with no readable expiry — opaque OIDC access tokens — are still used
+  until the server rejects them.
+- **Frontend**: OIDC sessions now actually refresh. The refresh token was
+  stored but never used: the renewal path only ran when the access token was
+  *absent*, and the access token was only ever removed by signing out, so an
+  expired one was returned indefinitely. Renewal now happens before a request
+  when the token has expired, and once in response to a `401`, before the
+  session is given up. Concurrent requests share a single refresh, so a
+  provider that rotates refresh tokens does not invalidate its own retries.
+
 ### Added
 
 - **Auth**: `PUT /api/users/me/password` — self-service password change for any

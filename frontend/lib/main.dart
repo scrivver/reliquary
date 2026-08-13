@@ -12,6 +12,34 @@ import 'theme.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 const appTitle = 'Reliquary';
 
+const _sessionExpiredNotice = 'Your session expired. Please sign in again.';
+
+/// Guards against a burst of navigations. A screen typically has several
+/// requests in flight, and an expired token fails all of them at once.
+bool _returningToAuthGate = false;
+
+/// Tears the app back down to [AuthGate], which re-checks the stored session
+/// and lands on the login screen when there is nothing valid left.
+///
+/// The caller is responsible for clearing the session first; this only moves
+/// the user. Pass [notice] to explain an involuntary sign-out.
+void returnToAuthGate({String? notice}) {
+  if (_returningToAuthGate) return;
+  final nav = navigatorKey.currentState;
+  if (nav == null) return;
+
+  _returningToAuthGate = true;
+  nav.pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => AuthGate(notice: notice)),
+    (_) => false,
+  );
+}
+
+/// Ends a session the server has stopped accepting. Reached when a token
+/// expires mid-use, and when one is revoked by a password change or a
+/// deactivation, since the backend rejects those the same way.
+void handleSessionExpired() => returnToAuthGate(notice: _sessionExpiredNotice);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.load();
@@ -34,7 +62,10 @@ class MyApp extends StatelessWidget {
 }
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
+  /// Message shown on the login screen, explaining an involuntary sign-out.
+  final String? notice;
+
+  const AuthGate({super.key, this.notice});
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -51,6 +82,9 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
+    // The gate is mounted, so the navigation that brought us here is done and
+    // a later expiry is free to move the user again.
+    _returningToAuthGate = false;
     _checkAuth();
   }
 
@@ -141,6 +175,7 @@ class _AuthGateState extends State<AuthGate> {
     return LoginScreen(
       authService: _authService,
       authConfig: _authConfig!,
+      notice: widget.notice,
       onAuthenticated: () => setState(() => _loggedIn = true),
     );
   }

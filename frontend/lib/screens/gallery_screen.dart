@@ -100,17 +100,6 @@ class _GalleryScreenState extends State<GalleryScreen> {
     if (mounted) setState(() => _username = username ?? '');
   }
 
-  void _handleUnauthorized() {
-    final nav = navigatorKey.currentState;
-    if (nav != null) {
-      widget.authService.logout();
-      nav.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AuthGate()),
-        (_) => false,
-      );
-    }
-  }
-
   Future<void> _loadFiles() async {
     setState(() {
       _loading = true;
@@ -363,7 +352,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
   Future<void> _logout() async {
     await widget.authService.logout();
-    _handleUnauthorized();
+    returnToAuthGate();
   }
 
   void _toggleSelect(FileItem file) {

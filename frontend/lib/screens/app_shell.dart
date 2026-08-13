@@ -33,18 +33,13 @@ class _AppShellState extends State<AppShell> {
     _loadRole();
   }
 
-  void _onUnauthorized() {
-    // Handled by main.dart navigatorKey
-  }
+  /// The session ended without the user asking. ApiService has already cleared
+  /// it; this moves them off the screens that can no longer load.
+  void _onUnauthorized() => handleSessionExpired();
 
   Future<void> _logout() async {
     await widget.authService.logout();
-    final nav = navigatorKey.currentState;
-    if (nav == null) return;
-    nav.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const AuthGate()),
-      (_) => false,
-    );
+    returnToAuthGate();
   }
 
   Future<void> _loadRole() async {
