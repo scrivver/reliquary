@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -34,6 +35,11 @@ type Config struct {
 	// Proxy auth (AUTH_MODE=proxy)
 	ProxySharedSecret        string // required secret the upstream proxy must present
 	ProxyTrustHeaderInsecure bool   // opt out of the shared secret requirement
+
+	// TrustedProxies are the peers whose X-Forwarded-For header is believed.
+	// The login rate limiter keys on the client address, so a header trusted
+	// from an arbitrary peer lets a caller mint a fresh quota per request.
+	TrustedProxies []netip.Prefix
 
 	// OIDC (AUTH_MODE=oidc)
 	OIDCIssuerURL     string // e.g. "http://localhost:9000/application/o/mind-palace/"
@@ -113,12 +119,62 @@ func Load() (*Config, error) {
 		cfg.OIDCAudience = cfg.OIDCClientID
 	}
 
+	trusted, err := parseTrustedProxies(os.LookupEnv("TRUSTED_PROXIES"))
+	if err != nil {
+		return nil, err
+	}
+	cfg.TrustedProxies = trusted
+
 	cfg.PasswordAuthEnabled = defaultAuthProviderEnabled("AUTH_PASSWORD_ENABLED", cfg.AuthMode == "full")
 	cfg.OIDCAuthEnabled = defaultAuthProviderEnabled("AUTH_OIDC_ENABLED", cfg.AuthMode == "oidc")
 	cfg.ProxyAuthEnabled = defaultAuthProviderEnabled("AUTH_PROXY_ENABLED", cfg.AuthMode == "proxy")
 	cfg.NoAuthEnabled = defaultAuthProviderEnabled("AUTH_NONE_ENABLED", cfg.AuthMode == "none")
 
 	return cfg, nil
+}
+
+// defaultTrustedProxies covers the topologies Reliquary ships: the reverse
+// proxy reaches the API over loopback or a container network, and the API port
+// is not published. A peer outside these ranges is talking to the API directly,
+// and nothing it claims about the client address is worth believing.
+var defaultTrustedProxies = []string{
+	"127.0.0.0/8",
+	"::1/128",
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+	"fc00::/7",
+}
+
+// parseTrustedProxies reads TRUSTED_PROXIES as a comma-separated list of CIDRs
+// or bare addresses. An unset variable selects the defaults; an explicitly
+// empty one trusts no peer, which is why this reads LookupEnv rather than
+// Getenv. A malformed entry is a startup error: silently dropping it would
+// leave the operator believing a proxy is trusted when it is not.
+func parseTrustedProxies(raw string, set bool) ([]netip.Prefix, error) {
+	entries := defaultTrustedProxies
+	if set {
+		entries = nil
+		for _, e := range strings.Split(raw, ",") {
+			if e = strings.TrimSpace(e); e != "" {
+				entries = append(entries, e)
+			}
+		}
+	}
+
+	prefixes := make([]netip.Prefix, 0, len(entries))
+	for _, e := range entries {
+		if p, err := netip.ParsePrefix(e); err == nil {
+			prefixes = append(prefixes, p.Masked())
+			continue
+		}
+		addr, err := netip.ParseAddr(e)
+		if err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXIES: %q is not an IP address or CIDR range", e)
+		}
+		prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return prefixes, nil
 }
 
 func envOr(key, fallback string) string {

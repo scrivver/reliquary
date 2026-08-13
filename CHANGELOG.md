@@ -54,6 +54,20 @@ All notable changes to Reliquary are documented in this file.
 - **Auth**: Password changes and deactivations bump a per-user `token_version`
   recorded in each token at login. Accounts and tokens predating this field both
   carry version 0, so existing sessions survive the upgrade.
+- **Rate limiting**: `X-Forwarded-For` is now believed only from a peer listed
+  in `TRUSTED_PROXIES` (default: loopback and private ranges), and the chain is
+  read right to left so the client is the first hop that is not itself a
+  trusted proxy. Previously the header was taken from any peer and parsed with
+  `net.SplitHostPort`, which fails on the bare addresses the header actually
+  carries — so a comma-separated chain became the map key verbatim, and
+  rotating it drew a fresh quota on every request. The bundled deployments were
+  not exposed: Caddy discards inbound `X-Forwarded-*` by default and the API
+  publishes no ports, so the limit held. The gap was the backend having no
+  protection of its own — it opened as soon as the API was reachable directly
+  (`LISTEN_ADDR` on a TCP port), or as soon as Caddy's `trusted_proxies` was
+  configured to put a CDN or TLS terminator in front, which makes Caddy forward
+  the client's unverified chain. Malformed entries are a startup error rather
+  than a silently dropped range.
 - **Downloads**: The `/storage/*` edge check now rejects non-canonical object
   keys and requires the bucket segment it anchors on. The forwarded request URI
   is percent-decoded before the namespace prefix is compared, so a request for

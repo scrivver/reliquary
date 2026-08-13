@@ -22,9 +22,10 @@ const (
 )
 
 type Service struct {
-	secret      []byte
-	users       *UserStore
-	rateLimiter *RateLimiter
+	secret         []byte
+	users          *UserStore
+	rateLimiter    *RateLimiter
+	trustedProxies TrustedProxies
 }
 
 type Source string
@@ -66,14 +67,15 @@ type ChangeOwnPasswordRequest struct {
 
 func NewService(cfg *config.Config, users *UserStore) *Service {
 	return &Service{
-		secret:      []byte(cfg.JWTSecret),
-		users:       users,
-		rateLimiter: NewRateLimiter(),
+		secret:         []byte(cfg.JWTSecret),
+		users:          users,
+		rateLimiter:    NewRateLimiter(),
+		trustedProxies: TrustedProxies(cfg.TrustedProxies),
 	}
 }
 
 func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	ip := ExtractIP(r)
+	ip := s.trustedProxies.ClientIP(r)
 	if !s.rateLimiter.Allow(ip) {
 		http.Error(w, "too many login attempts, try again later", http.StatusTooManyRequests)
 		return
@@ -150,7 +152,7 @@ func (s *Service) ChangeOwnPasswordHandler(w http.ResponseWriter, r *http.Reques
 
 	// Verifying the current password is what stops a stolen token from being
 	// escalated into permanent account ownership.
-	ip := ExtractIP(r)
+	ip := s.trustedProxies.ClientIP(r)
 	if !s.rateLimiter.Allow(ip) {
 		http.Error(w, "too many attempts, try again later", http.StatusTooManyRequests)
 		return

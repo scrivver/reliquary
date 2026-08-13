@@ -81,6 +81,19 @@ storage every 30 seconds. In a deployment running more than one API replica, a
 revocation performed on one replica therefore takes effect on the others within
 that interval.
 
+### Rate Limiting
+
+Failed logins are limited to five per minute per client address, and a
+successful login clears the counter. `PUT /api/users/me/password` shares the
+limiter, since it also verifies a password. One consequence worth knowing:
+clients sharing an address — an office behind NAT — share a quota across both
+endpoints.
+
+The client address comes from `X-Forwarded-For` only when the peer is a trusted
+proxy, which is what stops a caller rotating the header for unlimited attempts.
+See [Client Addresses](deployment.md#client-addresses) for how to configure it
+behind an additional proxy.
+
 ## OIDC Auth
 
 `AUTH_MODE=oidc` enables OIDC bearer-token authentication and frontend OIDC

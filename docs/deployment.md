@@ -67,6 +67,7 @@ Container configuration is provided through `.env` and consumed by
 | `AUTH_PROXY_SHARED_SECRET` | - | Secret the upstream proxy must send as `X-Reliquary-Proxy-Secret`; required in proxy mode |
 | `AUTH_PROXY_INSECURE_TRUST_HEADER` | `false` | Opt out of the shared secret requirement; only safe when the API is reachable solely from the proxy |
 | `AUTH_NONE_ENABLED` | derived from `AUTH_MODE` | Enables no-auth single-user mode |
+| `TRUSTED_PROXIES` | loopback + RFC1918 + ULA | Comma-separated CIDRs or addresses whose `X-Forwarded-For` is believed; see [Client Addresses](#client-addresses) |
 | `AUTH_USERNAME` | `admin` | Initial admin username seeded on first startup |
 | `AUTH_PASSWORD` | `change-me-in-production` | Initial admin password seeded on first startup |
 | `JWT_SECRET` | `change-me-in-production` | JWT signing secret; must be unique in production |
@@ -200,6 +201,45 @@ reaches MinIO.
 Note that proxy auth only takes effect when password and OIDC auth are both
 disabled. If either is enabled, `X-Reliquary-User` is ignored and the backend
 logs a warning at startup.
+
+### Client Addresses
+
+Failed logins and self-service password changes are rate limited per client
+address. Behind a reverse proxy every request arrives from the proxy, so the
+real client is read from `X-Forwarded-For` — but that header is written by
+whoever sent the request, so it is believed only from a peer listed in
+`TRUSTED_PROXIES`. From anywhere else the connection address is used and the
+header ignored, otherwise a caller could rotate it and draw a fresh quota per
+attempt.
+
+The default covers the topologies Reliquary ships: loopback, RFC1918, and IPv6
+ULA. In the bundled Compose file the API publishes no ports and is reachable
+only from the `web` container, so the default is already correct. Setting
+`TRUSTED_PROXIES=` explicitly empty trusts no peer at all — appropriate if the
+API is exposed directly, though it also means every client behind a proxy
+shares one quota.
+
+Proxies append to the header, so the chain is read right to left and the first
+entry that is not itself a trusted proxy is taken as the client.
+
+If you put another proxy in front of Caddy (a CDN, or nginx terminating TLS),
+configure **both** sides:
+
+```caddyfile
+# Caddy: without this it discards the inbound chain and reports its own peer
+servers {
+  trusted_proxies static 203.0.113.0/24
+}
+```
+
+```env
+# Reliquary: add the same upstream so its hop is skipped when reading the chain
+TRUSTED_PROXIES=127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7,203.0.113.0/24
+```
+
+Configuring only Caddy re-opens the bypass: Caddy would begin forwarding the
+client's unverified chain, and Reliquary would have no way to tell which hops
+to believe.
 
 ### Start RabbitMQ
 
