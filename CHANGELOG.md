@@ -63,6 +63,11 @@ All notable changes to Reliquary are documented in this file.
 
 ### Added
 
+- **Auth**: `PUT /api/users/me/password` — self-service password change for any
+  authenticated user. It requires the current password, so a stolen token cannot
+  be escalated into permanent ownership of the account, and it returns a
+  replacement token so the calling client stays signed in while every other
+  session for that account is signed out.
 - **Auth**: The API re-reads the user store from object storage every 30
   seconds, so a deactivation or password change performed by one API replica
   applies on the others within that interval. Previously revocation would only
@@ -81,6 +86,15 @@ All notable changes to Reliquary are documented in this file.
   required for the login flow — is usually enough. See
   [Identity Provider Configuration](docs/idp-configuration.md) for how to
   confirm the value and for per-provider setup.
+- **BREAKING — password changes**: `PUT /api/admin/users/{username}/password` is
+  now purely administrative and rejects any attempt to change an admin account's
+  password, including the caller's own. Changing your own password moves to
+  `PUT /api/users/me/password`, which takes `current_password` and
+  `new_password` instead of `password`. The previous endpoint documented itself
+  as "admin or self", but was registered behind admin-only middleware, so the
+  self-service branch was unreachable for non-admin users — a normal user could
+  not change their own password at all. The settings screen already collected
+  the current password without sending it; it now does.
 - **BREAKING — mixed auth mode**: `AUTH_MODE=oidc` with
   `AUTH_PASSWORD_ENABLED=true` (and the reverse) is no longer supported and now
   refuses to start. Mixed mode was documented in v0.3.0; use password auth or

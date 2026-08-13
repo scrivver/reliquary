@@ -205,12 +205,34 @@ class ApiService {
     await _dio.put('/api/admin/users/$username/activate');
   }
 
-  /// Change a user's password.
+  /// Reset another user's password. Admin only; use [changeOwnPassword] for
+  /// your own account.
   Future<void> changePassword(String username, String newPassword) async {
     await _dio.put(
       '/api/admin/users/$username/password',
       data: {'password': newPassword},
     );
+  }
+
+  /// Change your own password. Requires the current password, and stores the
+  /// replacement token the server issues — the change signs out every other
+  /// session, including any other device.
+  Future<void> changeOwnPassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final response = await _dio.put(
+      '/api/users/me/password',
+      data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      },
+    );
+
+    final token = (response.data as Map?)?['token'] as String?;
+    if (token != null) {
+      await _authService.updateToken(token);
+    }
   }
 }
 

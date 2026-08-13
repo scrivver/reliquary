@@ -153,6 +153,100 @@ func TestTokenAcceptedAtDefaultVersion(t *testing.T) {
 	}
 }
 
+// changeOwnPassword runs a self-service password change with the given token.
+func changeOwnPassword(t *testing.T, svc *Service, token, current, next string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body, _ := json.Marshal(ChangeOwnPasswordRequest{
+		CurrentPassword: current,
+		NewPassword:     next,
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/users/me/password", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	svc.Middleware(http.HandlerFunc(svc.ChangeOwnPasswordHandler)).ServeHTTP(w, req)
+	return w
+}
+
+// A self-service change must end other sessions while keeping the caller's own
+// client signed in, which is what the reissued token is for.
+func TestChangeOwnPasswordSupersedesOtherSessions(t *testing.T) {
+	users := testUserStore(t)
+	seedUser(t, users, "alice", "pass", RoleUser)
+	svc := NewService(testConfig(), users)
+	handler := svc.Middleware(okHandler())
+
+	other := login(t, svc, "alice", "pass")
+	caller := login(t, svc, "alice", "pass")
+
+	w := changeOwnPassword(t, svc, caller, "pass", "newpass")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp LoginResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Token == "" {
+		t.Fatal("no replacement token returned")
+	}
+
+	if code := requestStatus(t, handler, resp.Token); code != http.StatusOK {
+		t.Errorf("replacement token rejected: %d", code)
+	}
+	if code := requestStatus(t, handler, other); code != http.StatusUnauthorized {
+		t.Errorf("other session survived: %d, want %d", code, http.StatusUnauthorized)
+	}
+	if code := requestStatus(t, handler, caller); code != http.StatusUnauthorized {
+		t.Errorf("superseded caller token survived: %d, want %d", code, http.StatusUnauthorized)
+	}
+}
+
+// A stolen token must not be enough to take permanent ownership of an account.
+func TestChangeOwnPasswordRequiresCurrentPassword(t *testing.T) {
+	users := testUserStore(t)
+	seedUser(t, users, "alice", "pass", RoleUser)
+	svc := NewService(testConfig(), users)
+
+	token := login(t, svc, "alice", "pass")
+
+	// 403, not 401: a mistyped password must not read as an expired session and
+	// sign the user out.
+	if w := changeOwnPassword(t, svc, token, "wrong", "newpass"); w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+	if w := changeOwnPassword(t, svc, token, "", "newpass"); w.Code != http.StatusBadRequest {
+		t.Errorf("status for missing current password = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	if w := changeOwnPassword(t, svc, token, "pass", ""); w.Code != http.StatusBadRequest {
+		t.Errorf("status for missing new password = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	// The original password must still work after the failed attempts.
+	if _, err := users.Authenticate("alice", "pass"); err != nil {
+		t.Errorf("password changed despite rejection: %v", err)
+	}
+}
+
+func TestChangeOwnPasswordRequiresAuthentication(t *testing.T) {
+	users := testUserStore(t)
+	seedUser(t, users, "alice", "pass", RoleUser)
+	svc := NewService(testConfig(), users)
+
+	body, _ := json.Marshal(ChangeOwnPasswordRequest{
+		CurrentPassword: "pass",
+		NewPassword:     "newpass",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/users/me/password", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	svc.Middleware(http.HandlerFunc(svc.ChangeOwnPasswordHandler)).ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
 // Each bump supersedes only the sessions that came before it.
 func TestTokenVersionAdvancesPerChange(t *testing.T) {
 	users := testUserStore(t)

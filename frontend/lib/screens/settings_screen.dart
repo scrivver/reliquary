@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../config.dart';
@@ -108,12 +109,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
-      await widget.apiService!.changePassword(_username!, newPassword);
+      await widget.apiService!.changeOwnPassword(currentPassword, newPassword);
       if (!mounted) return;
       _currentPasswordController.clear();
       _newPasswordController.clear();
       _confirmPasswordController.clear();
-      _showSnackBar('Password changed successfully');
+      _showSnackBar('Password changed. Other devices have been signed out.');
+    } on DioException catch (e) {
+      if (!mounted) return;
+      if (e.response?.statusCode == 403) {
+        _showSnackBar('Current password is incorrect.');
+      } else {
+        _showSnackBar('Failed to change password: ${e.message}');
+      }
     } catch (e) {
       if (!mounted) return;
       _showSnackBar('Failed to change password: $e');

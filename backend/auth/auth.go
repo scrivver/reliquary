@@ -56,6 +56,14 @@ type LoginResponse struct {
 	Role     string `json:"role"`
 }
 
+// ChangeOwnPasswordRequest is the self-service password change payload. The
+// current password is required: a token alone must not be enough to take
+// permanent ownership of an account.
+type ChangeOwnPasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 func NewService(cfg *config.Config, users *UserStore) *Service {
 	return &Service{
 		secret:      []byte(cfg.JWTSecret),
@@ -86,18 +94,7 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Reset rate limit on successful login.
 	s.rateLimiter.Reset(ip)
 
-	claims := &Claims{
-		Username:     req.Username,
-		Role:         user.Role,
-		Source:       SourcePassword,
-		TokenVersion: user.TokenVersion,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
+	token, err := s.issueToken(req.Username, *user)
 	if err != nil {
 		http.Error(w, "failed to create token", http.StatusInternalServerError)
 		return
@@ -107,6 +104,91 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(LoginResponse{
 		Token:    token,
 		Username: req.Username,
+		Role:     string(user.Role),
+	})
+}
+
+// issueToken mints a signed token for the account's current state. The token
+// version is captured here, so any later bump supersedes this token.
+func (s *Service) issueToken(username string, user User) (string, error) {
+	claims := &Claims{
+		Username:     username,
+		Role:         user.Role,
+		Source:       SourcePassword,
+		TokenVersion: user.TokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
+}
+
+// ChangeOwnPasswordHandler lets an authenticated user change their own
+// password. It is deliberately separate from the admin endpoint: the two have
+// different authorization rules and different payloads, and merging them made
+// the self-service path unreachable behind admin-only middleware.
+//
+// PUT /api/users/me/password
+func (s *Service) ChangeOwnPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	username := UsernameFromContext(r.Context())
+	if username == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req ChangeOwnPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		http.Error(w, "current_password and new_password are required", http.StatusBadRequest)
+		return
+	}
+
+	// Verifying the current password is what stops a stolen token from being
+	// escalated into permanent account ownership.
+	ip := ExtractIP(r)
+	if !s.rateLimiter.Allow(ip) {
+		http.Error(w, "too many attempts, try again later", http.StatusTooManyRequests)
+		return
+	}
+	// 403 rather than 401: the session is valid, it is the re-authentication for
+	// this privileged action that failed. Clients treat 401 as "session over"
+	// and sign the user out, which a mistyped password should not do.
+	if _, err := s.users.Authenticate(username, req.CurrentPassword); err != nil {
+		http.Error(w, "current password is incorrect", http.StatusForbidden)
+		return
+	}
+	s.rateLimiter.Reset(ip)
+
+	if err := s.users.ChangePassword(r.Context(), username, req.NewPassword); err != nil {
+		http.Error(w, "failed to change password", http.StatusInternalServerError)
+		return
+	}
+
+	// The change bumped the account's token version, so the caller's current
+	// token is now superseded along with every other session. Hand back a
+	// replacement so the active client stays signed in and the others do not.
+	user, ok := s.users.Get(username)
+	if !ok {
+		http.Error(w, "failed to reissue token", http.StatusInternalServerError)
+		return
+	}
+	token, err := s.issueToken(username, *user)
+	if err != nil {
+		http.Error(w, "failed to reissue token", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("password changed by account owner", "user", username)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(LoginResponse{
+		Token:    token,
+		Username: username,
 		Role:     string(user.Role),
 	})
 }

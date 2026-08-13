@@ -69,6 +69,14 @@ class AuthService {
     }
   }
 
+  /// Replace the stored token. A self-service password change supersedes every
+  /// token issued before it, including the caller's, so the server hands back a
+  /// replacement to keep this client signed in.
+  Future<void> updateToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
+
   Future<bool> loginWithOidc(OidcAuthConfig oidc) async {
     if (!oidc.enabled || oidc.issuerUrl.isEmpty || oidc.clientId.isEmpty) {
       return false;

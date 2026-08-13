@@ -15,15 +15,46 @@ The API is served under `/api`.
 | `GET` | `/api/auth/check` | Yes | Edge check for `/storage/*`: verifies identity and key ownership (invoked by Caddy `forward_auth`, not by the app) |
 | `DELETE` | `/api/files?key=...` | Yes | Delete file and thumbnail |
 | `GET` | `/api/stats` | Yes | User storage analytics |
+| `PUT` | `/api/users/me/password` | Yes | Change your own password; requires the current password |
 | `GET` | `/api/admin/stats` | Admin | Aggregate analytics |
 | `POST` | `/api/admin/users` | Admin | Create standard user |
 | `GET` | `/api/admin/users` | Admin | List users |
 | `DELETE` | `/api/admin/users/{username}` | Admin | Deactivate standard user |
 | `DELETE` | `/api/admin/users/{username}?permanent=true` | Admin | Permanently delete a deactivated standard user and their data |
 | `PUT` | `/api/admin/users/{username}/activate` | Admin | Re-enable a deactivated standard user |
-| `PUT` | `/api/admin/users/{username}/password` | Admin* | Change password |
+| `PUT` | `/api/admin/users/{username}/password` | Admin | Reset a standard user's password |
 
-Admin can change standard-user passwords. Users can change their own passwords.
+## Password Changes
+
+The two paths are separate endpoints with different rules, because they are
+different operations:
+
+**Your own password** — `PUT /api/users/me/password`, available to any
+authenticated user:
+
+```json
+{ "current_password": "...", "new_password": "..." }
+```
+
+The current password is required, so a stolen token cannot be escalated into
+permanent ownership of the account. A wrong current password returns `403`, not
+`401`, so clients do not mistake it for an expired session.
+
+The change signs out every other session for that account. The response carries
+a replacement token in the same shape as `/api/login`, keeping the calling
+client signed in — store it, or subsequent requests will `401`.
+
+**Someone else's password** — `PUT /api/admin/users/{username}/password`, admin
+only:
+
+```json
+{ "password": "..." }
+```
+
+An admin resets standard users' passwords without knowing the current one. This
+endpoint refuses admin accounts, including the caller's own (`403`) and
+deactivated accounts (`409`); admins change their own password through the
+self-service endpoint like everyone else.
 
 ## File Upload Behavior
 

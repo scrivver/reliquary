@@ -625,8 +625,9 @@ func (ah *AdminHandler) ActivateUser(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"status": "active"})
 }
 
-// ChangePassword changes a user's password. Admins can change standard users;
-// every user can change their own password.
+// ChangePassword resets a standard user's password on their behalf. This is the
+// administrative path only; changing your own password goes through
+// PUT /api/users/me/password, which requires the current password.
 // PUT /api/admin/users/{username}/password
 func (ah *AdminHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	target := r.PathValue("username")
@@ -635,27 +636,22 @@ func (ah *AdminHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	caller := auth.UsernameFromContext(r.Context())
-	callerRole := auth.RoleFromContext(r.Context())
-	if caller != target {
-		if callerRole != auth.RoleAdmin {
-			httpError(w, "can only change your own password", http.StatusForbidden)
-			return
-		}
-		targetUser, ok := ah.users.Get(target)
-		if !ok {
-			httpError(w, fmt.Sprintf("user %q not found", target), http.StatusNotFound)
-			return
-		}
-		if targetUser.DeactivatedAt != nil {
-			httpError(w, "deactivated user passwords cannot be changed", http.StatusConflict)
-			return
-		}
-		if targetUser.Role == auth.RoleAdmin {
-			httpError(w, "admin passwords can only be changed by the account owner", http.StatusForbidden)
-			return
-		}
+	targetUser, ok := ah.users.Get(target)
+	if !ok {
+		httpError(w, fmt.Sprintf("user %q not found", target), http.StatusNotFound)
+		return
 	}
+	if targetUser.DeactivatedAt != nil {
+		httpError(w, "deactivated user passwords cannot be changed", http.StatusConflict)
+		return
+	}
+	// Admins reset other people's passwords, never another admin's and never
+	// their own — an admin changing their own password proves they know it.
+	if targetUser.Role == auth.RoleAdmin {
+		httpError(w, "admin passwords can only be changed by the account owner", http.StatusForbidden)
+		return
+	}
+
 	var req ChangePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Password == "" {
 		httpError(w, "password is required", http.StatusBadRequest)

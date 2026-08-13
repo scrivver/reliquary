@@ -83,7 +83,8 @@ All endpoints except `/api/login` and `/api/health` require a `Bearer` JWT token
 | POST | `/api/admin/users` | Create user (admin only) |
 | GET | `/api/admin/users` | List users (admin only) |
 | DELETE | `/api/admin/users/{username}` | Delete user (admin only) |
-| PUT | `/api/admin/users/{username}/password` | Change password (admin or self) |
+| PUT | `/api/admin/users/{username}/password` | Reset a standard user's password (admin only; refuses admin and deactivated accounts) |
+| PUT | `/api/users/me/password` | Change your own password (any authenticated user; requires the current password, returns a replacement token) |
 
 ## Running Locally
 

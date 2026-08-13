@@ -202,6 +202,12 @@ func main() {
 		})
 
 		if authSvc != nil {
+			// Self-service account management: authenticated, but not admin.
+			r.Group(func(r chi.Router) {
+				r.Use(authSvc.Middleware)
+				r.Put("/api/users/me/password", authSvc.ChangeOwnPasswordHandler)
+			})
+
 			adminH := handler.NewAdminHandler(users, store, fileIndex)
 			// Admin endpoints (admin role required).
 			r.Group(func(r chi.Router) {

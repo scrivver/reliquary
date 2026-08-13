@@ -69,6 +69,13 @@ records at login, so tokens issued earlier no longer match. Because
 `/api/auth/check` runs under the same middleware, revocation also covers
 `/storage/*` downloads.
 
+Changing your own password is therefore how you sign out a device you no longer
+control. It goes through `PUT /api/users/me/password`, which requires the
+current password and returns a replacement token so the client making the change
+stays signed in. Admins reset *other* users' passwords through
+`PUT /api/admin/users/{username}/password`, and change their own the same way
+everyone else does. See the [API Reference](api-reference.md#password-changes).
+
 The account state behind these checks is held in memory and re-read from object
 storage every 30 seconds. In a deployment running more than one API replica, a
 revocation performed on one replica therefore takes effect on the others within
