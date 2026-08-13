@@ -82,6 +82,23 @@ requested object key starts with the caller's namespace (`files/<user>/...`,
 denied. File bytes are never relayed through the Go backend for previews or
 single-file downloads; the backend only answers the small check request.
 
+The key is recovered from the `X-Forwarded-Uri` header Caddy sets. Two
+properties of that parse are load-bearing:
+
+- **The bucket segment is required.** It is the only structural anchor in the
+  forwarded path, so a request that does not name it is rejected rather than
+  reinterpreted as some other key.
+- **Keys must be canonical** — no empty, `.`, or `..` segments. The header is
+  percent-decoded before the namespace prefix is compared, so
+  `files/alice%2f..%2f..%2ffiles%2fbob%2fx` would otherwise decode to a key
+  naming another user's object while still passing a `files/alice/` prefix
+  test. Non-canonical keys are rejected, never normalized: Caddy forwards the
+  raw path to MinIO, so a key the backend rewrote would no longer be the key
+  MinIO serves.
+
+Caddy overwrites both `X-Forwarded-Uri` and `X-Forwarded-For` on inbound
+requests, so neither can be supplied by the client.
+
 ## Admin User Lifecycle
 
 The web/API can create standard users only. Admin users are created during

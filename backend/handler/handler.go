@@ -797,10 +797,38 @@ func rekeyPrefix(key, from, to string) string {
 	return to + strings.TrimPrefix(key, from)
 }
 
+// validObjectKey reports whether key is a canonical object key: non-empty, and
+// built only from ordinary path segments.
+//
+// The prefix checks below are byte comparisons, so they read
+// "files/alice/../../files/bob/x" as living under alice while it names bob's
+// object. Traversal reaches a key by two routes: url.Path percent-decodes, so
+// "alice%2f..%2f.." arrives already expanded, and a client-supplied ?key= is
+// decoded the same way.
+//
+// Non-canonical keys are rejected rather than cleaned. Caddy forwards the raw,
+// still-encoded path to MinIO after stripping /storage, so a key we normalized
+// would no longer be the key MinIO serves — the check and the fetch would be
+// talking about different objects. Rejecting keeps them identical without
+// having to model how MinIO resolves the encoding. Keys Reliquary generates are
+// already canonical: upload runs them through path.Clean and path.Base.
+func validObjectKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for _, seg := range strings.Split(key, "/") {
+		switch seg {
+		case "", ".", "..":
+			return false
+		}
+	}
+	return true
+}
+
 // UserOwnsKey checks that key lives in one of the active owner-prefixed
 // namespaces for username.
 func UserOwnsKey(username, key string) bool {
-	if username == "" {
+	if username == "" || !validObjectKey(key) {
 		return false
 	}
 	prefixes := [...]string{

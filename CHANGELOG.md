@@ -54,6 +54,19 @@ All notable changes to Reliquary are documented in this file.
 - **Auth**: Password changes and deactivations bump a per-user `token_version`
   recorded in each token at login. Accounts and tokens predating this field both
   carry version 0, so existing sessions survive the upgrade.
+- **Downloads**: The `/storage/*` edge check now rejects non-canonical object
+  keys and requires the bucket segment it anchors on. The forwarded request URI
+  is percent-decoded before the namespace prefix is compared, so a request for
+  `files/alice%2f..%2f..%2ffiles%2fbob%2fx.jpg` decoded to a key naming another
+  user's object while still passing the `files/alice/` prefix test — the check
+  answered "allow" for a file the caller did not own. MinIO refused to serve
+  the object independently (`XMinioInvalidResourceName`), so this was not
+  exploitable end to end, but the authorization decision itself was wrong. A
+  missing bucket segment was also silently tolerated, yielding a key that named
+  a different object than the request did. Keys are rejected rather than
+  normalized: Caddy forwards the raw path to MinIO, so a rewritten key would no
+  longer be the key MinIO serves. The same canonical-key check now guards the
+  ownership test used by presign, batch download, and delete.
 - **Auth**: Usernames are validated against `^[a-zA-Z0-9._-]{1,64}$` wherever an
   identity enters the system — local account creation, the OIDC username claim
   (from the access token and from userinfo), and the proxy identity header.

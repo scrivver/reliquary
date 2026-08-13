@@ -242,12 +242,81 @@ func TestUserOwnsKeyOnlyAllowsActiveNamespaces(t *testing.T) {
 		{"archive/alice/2026/06/report.pdf", false},
 		{"archive-thumbs/alice/2026/06/report.pdf", false},
 		{"files/bob/2026/06/report.pdf", false},
+
+		// Traversal out of the caller's namespace: a byte-prefix check reads
+		// each of these as living under alice.
+		{"files/alice/../../files/bob/2026/06/report.pdf", false},
+		{"files/alice/../bob/report.pdf", false},
+		{"files/alice//../bob/report.pdf", false},
+		{"files/alice/./../bob/report.pdf", false},
+		{"files/alice/", false},
+		{"", false},
 	}
 
 	for _, tt := range tests {
 		if got := UserOwnsKey("alice", tt.key); got != tt.want {
 			t.Errorf("UserOwnsKey(%q) = %v, want %v", tt.key, got, tt.want)
 		}
+	}
+}
+
+// TestAuthCheckDeniesTraversalToAnotherNamespace drives the whole edge check
+// the way Caddy's forward_auth does. The unit tests above cover the parser;
+// this one asserts the status Caddy actually acts on, since a 2xx here streams
+// the object.
+func TestAuthCheckDeniesTraversalToAnotherNamespace(t *testing.T) {
+	h := &Handler{bucket: "reliquary"}
+
+	tests := []struct {
+		name       string
+		forwarded  string
+		wantStatus int
+	}{
+		{
+			name:       "own object",
+			forwarded:  "/reliquary/files/alice/2026/06/own.txt?X-Amz-Signature=abc",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:       "own thumbnail",
+			forwarded:  "/reliquary/thumbs/alice/2026/06/own.txt",
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:       "another user's object, named directly",
+			forwarded:  "/reliquary/files/bob/2026/06/secret.txt",
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "another user's object, via percent-encoded traversal",
+			forwarded:  "/reliquary/files/alice%2f..%2f..%2ffiles%2fbob%2f2026%2f06%2fsecret.txt",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "another user's object, via empty segment and traversal",
+			forwarded:  "/reliquary/files/alice//..%2ffiles%2fbob%2f2026%2f06%2fsecret.txt",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "bucket segment omitted",
+			forwarded:  "/files/alice/2026/06/own.txt",
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/api/auth/check", nil)
+			r = r.WithContext(auth.WithIdentity(r.Context(), "alice", auth.RoleUser))
+			r.Header.Set("X-Forwarded-Uri", tt.forwarded)
+
+			w := httptest.NewRecorder()
+			h.AuthCheck(w, r)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("AuthCheck(%q) = %d, want %d", tt.forwarded, w.Code, tt.wantStatus)
+			}
+		})
 	}
 }
 
@@ -258,12 +327,40 @@ func TestObjectKeyFromStorageURI(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"/storage/reliquary/files/alice/2026/06/a.jpg?X-Amz-Signature=abc", "reliquary", "files/alice/2026/06/a.jpg", false},
-		{"/storage/reliquary/thumbs/alice/2026/06/a.jpg", "reliquary", "thumbs/alice/2026/06/a.jpg", false},
-		{"/storage/my%20bucket/files/alice/a%20b.txt", "my bucket", "files/alice/a b.txt", false},
-		{"/storage/files/alice/a.jpg", "", "files/alice/a.jpg", false},
-		{"/api/auth/check", "reliquary", "api/auth/check", false},
+		// The shape Caddy actually forwards: /storage already stripped, query
+		// string carrying the presigned signature.
+		{"/reliquary/files/alice/2026/06/a.jpg?X-Amz-Signature=abc", "reliquary", "files/alice/2026/06/a.jpg", false},
+		{"/reliquary/thumbs/alice/2026/06/a.jpg", "reliquary", "thumbs/alice/2026/06/a.jpg", false},
+		{"/my%20bucket/files/alice/a%20b.txt", "my bucket", "files/alice/a b.txt", false},
+
+		// The unstripped form, accepted so a change in Caddy's directive
+		// ordering does not silently deny every download.
+		{"/storage/reliquary/files/alice/2026/06/a.jpg", "reliquary", "files/alice/2026/06/a.jpg", false},
+
+		// A bucket named "storage" must not be confused with the prefix.
+		{"/storage/files/alice/a.jpg", "storage", "files/alice/a.jpg", false},
+
 		{"", "reliquary", "", true},
+
+		// Percent-encoded traversal. url.Path decodes these before any prefix
+		// check runs, so the decoded key escapes alice's namespace while still
+		// starting with "files/alice/".
+		{"/reliquary/files/alice%2f..%2f..%2ffiles%2fbob%2fx.jpg", "reliquary", "", true},
+		{"/reliquary/files/alice/../../files/bob/x.jpg", "reliquary", "", true},
+		{"/reliquary/files/alice//../bob/x.jpg", "reliquary", "", true},
+		{"/reliquary/files/alice/%2e%2e/bob/x.jpg", "reliquary", "", true},
+
+		// Missing or wrong bucket segment. Previously trimmed to a key that
+		// named a different object than the one Caddy forwards to MinIO.
+		{"/files/alice/a.jpg", "reliquary", "", true},
+		{"/otherbucket/files/alice/a.jpg", "reliquary", "", true},
+		{"/reliquary/files/alice/a.jpg", "", "", true},
+
+		// No object key, or not a storage path at all. "/api/auth/check"
+		// previously came back as the key "api/auth/check".
+		{"/api/auth/check", "reliquary", "", true},
+		{"/reliquary/", "reliquary", "", true},
+		{"/reliquary", "reliquary", "", true},
 	}
 	for _, tt := range tests {
 		got, err := objectKeyFromStorageURI(tt.rawURI, tt.bucket)

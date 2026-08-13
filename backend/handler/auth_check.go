@@ -37,25 +37,42 @@ func (h *Handler) AuthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// objectKeyFromStorageURI extracts the object key from a /storage/... request
-// URI as forwarded by Caddy. Presigned download URLs use the layout
-// /storage/<bucket>/<key>, so both the /storage prefix and the bucket segment
-// are stripped to recover the app-level key (e.g. "files/alice/2026/06/a.jpg").
+// objectKeyFromStorageURI extracts the object key from the request URI Caddy
+// forwards for a /storage/... download, recovering the app-level key (e.g.
+// "files/alice/2026/06/a.jpg").
+//
+// Caddy applies its own directive ordering rather than the Caddyfile's, and
+// `uri strip_prefix /storage` sorts ahead of `forward_auth`. The URI therefore
+// arrives as /<bucket>/<key>, already stripped. The /storage/<bucket>/<key>
+// form is accepted too so this does not silently break if that ordering
+// changes or an operator wraps the directives in an explicit route.
+//
+// The bucket segment is required rather than optimistically trimmed: it is the
+// only structural anchor in the path, and a TrimPrefix that silently no-ops
+// returns a key naming a different object than the request does — which is
+// then handed to the ownership check as if it were the real one.
 func objectKeyFromStorageURI(rawURI, bucket string) (string, error) {
 	if rawURI == "" {
 		return "", fmt.Errorf("missing X-Forwarded-Uri")
+	}
+	if bucket == "" {
+		return "", fmt.Errorf("no bucket configured to anchor %q", rawURI)
 	}
 	u, err := url.Parse(rawURI)
 	if err != nil {
 		return "", fmt.Errorf("parse storage uri: %w", err)
 	}
-	p := strings.TrimPrefix(u.Path, "/storage")
-	p = strings.TrimPrefix(p, "/")
-	if bucket != "" {
-		p = strings.TrimPrefix(p, bucket+"/")
+	// Match the bucket before considering the unstripped form, so a bucket
+	// literally named "storage" is not mistaken for the prefix.
+	key, ok := strings.CutPrefix(u.Path, "/"+bucket+"/")
+	if !ok {
+		key, ok = strings.CutPrefix(u.Path, "/storage/"+bucket+"/")
 	}
-	if p == "" {
-		return "", fmt.Errorf("no object key in %q", rawURI)
+	if !ok {
+		return "", fmt.Errorf("path is not under bucket %q: %q", bucket, rawURI)
 	}
-	return p, nil
+	if !validObjectKey(key) {
+		return "", fmt.Errorf("object key is not canonical: %q", key)
+	}
+	return key, nil
 }
