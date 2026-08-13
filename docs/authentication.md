@@ -52,6 +52,28 @@ JWT_SECRET=unique-random-secret
 
 The default development credentials are `admin` / `admin`.
 
+### Session Revocation
+
+Tokens are valid for 72 hours, but every authenticated request re-checks the
+account behind the token, so a session can be ended before its token expires:
+
+| Action | Effect on existing tokens |
+|--------|---------------------------|
+| Deactivate user | Rejected immediately |
+| Delete user | Rejected immediately |
+| Change password | Rejected immediately (all of that user's sessions) |
+| Change role | Applies immediately; no re-login needed |
+
+Password changes and deactivations bump a per-user token version that each token
+records at login, so tokens issued earlier no longer match. Because
+`/api/auth/check` runs under the same middleware, revocation also covers
+`/storage/*` downloads.
+
+The account state behind these checks is held in memory and re-read from object
+storage every 30 seconds. In a deployment running more than one API replica, a
+revocation performed on one replica therefore takes effect on the others within
+that interval.
+
 ## OIDC Auth
 
 `AUTH_MODE=oidc` enables OIDC bearer-token authentication and frontend OIDC
@@ -79,6 +101,11 @@ identity provider. Reliquary local-user management is intended for full auth
 mode, and the `/api/admin/*` endpoints are **not registered** in OIDC mode —
 including aggregate storage analytics. Group and role claims are not mapped, so
 every OIDC identity gets the `user` role.
+
+Revocation is the provider's responsibility in this mode, and it is bounded by
+the access token's lifetime rather than applied on the spot: access tokens are
+verified locally against the issuer's keys, so a token revoked at the provider
+keeps working until it expires. Keep access-token lifetimes short.
 
 The username claim becomes the user's storage namespace, so it must be stable:
 renaming a user at the provider makes their existing files unreachable, and

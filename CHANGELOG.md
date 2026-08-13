@@ -43,6 +43,17 @@ All notable changes to Reliquary are documented in this file.
   username happened to be `admin` addressed the local admin's files and passed
   every ownership check, including the `/storage/*` edge check. Enabling both
   now fails at startup.
+- **Auth**: Reliquary-issued JWTs are now checked against the account they name
+  on every request, instead of being trusted for their full 72-hour lifetime on
+  the strength of their signature alone. Deactivating a user, deleting a user,
+  or changing a password now ends that user's existing sessions immediately;
+  previously all three left every issued token working for up to three days,
+  including for `/storage/*` downloads via the edge check. Role changes also
+  apply immediately, since the role is now read from the stored account rather
+  than from the token's claim.
+- **Auth**: Password changes and deactivations bump a per-user `token_version`
+  recorded in each token at login. Accounts and tokens predating this field both
+  carry version 0, so existing sessions survive the upgrade.
 - **Auth**: Usernames are validated against `^[a-zA-Z0-9._-]{1,64}$` wherever an
   identity enters the system — local account creation, the OIDC username claim
   (from the access token and from userinfo), and the proxy identity header.
@@ -52,6 +63,10 @@ All notable changes to Reliquary are documented in this file.
 
 ### Added
 
+- **Auth**: The API re-reads the user store from object storage every 30
+  seconds, so a deactivation or password change performed by one API replica
+  applies on the others within that interval. Previously revocation would only
+  have applied to the replica that handled the change.
 - **Docs**: [Identity Provider Configuration](docs/idp-configuration.md) — how to
   read the issuer, audience, and username claim off a real token, plus
   per-provider setup for Authentik, Keycloak, Authelia, and Zitadel.

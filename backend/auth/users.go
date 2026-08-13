@@ -29,12 +29,24 @@ type User struct {
 	Role          Role       `json:"role"`
 	CreatedAt     time.Time  `json:"created_at"`
 	DeactivatedAt *time.Time `json:"deactivated_at,omitempty"`
+	// TokenVersion invalidates previously issued tokens. Each token records the
+	// version current at login; bumping it here leaves every existing token
+	// mismatched and therefore rejected. A timestamp floor cannot do this
+	// reliably, because a JWT's iat has one-second resolution and so cannot
+	// order a token against a change made in the same second. Accounts
+	// predating this field carry version 0, matching tokens that have no
+	// version claim.
+	TokenVersion int `json:"token_version,omitempty"`
 }
 
 type UserStore struct {
 	client *storage.Client
 	mu     sync.RWMutex
 	users  map[string]User // username → User
+	// saveMu serializes read-modify-persist sequences against each other and
+	// against reloads, so a reload landing mid-mutation cannot cause the
+	// pending write to persist the state it just overwrote.
+	saveMu sync.Mutex
 }
 
 func NewUserStore(client *storage.Client) *UserStore {
@@ -46,28 +58,76 @@ func NewUserStore(client *storage.Client) *UserStore {
 
 // Load reads the user store from MinIO.
 func (s *UserStore) Load(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	n, err := s.reload(ctx)
+	if err != nil {
+		return err
+	}
+	slog.Info("user store loaded", "users", n)
+	return nil
+}
+
+// reload replaces the in-memory users with the persisted copy, returning the
+// resulting user count. The current state is kept on any failure — a missing,
+// unreadable, or malformed object must not empty a running store.
+func (s *UserStore) reload(ctx context.Context) (int, error) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 
 	obj, err := s.client.GetObject(ctx, usersKey)
 	if err != nil {
 		slog.Info("user store not found, starting empty")
-		return nil
+		return s.count(), nil
 	}
 	defer obj.Close()
 
 	data, err := io.ReadAll(obj)
 	if err != nil || len(data) == 0 {
-		return nil
+		return s.count(), nil
 	}
 
-	if err := json.Unmarshal(data, &s.users); err != nil {
-		slog.Warn("failed to parse user store, starting empty", "error", err)
-		s.users = make(map[string]User)
+	users := make(map[string]User)
+	if err := json.Unmarshal(data, &users); err != nil {
+		slog.Warn("failed to parse user store, keeping current users", "error", err)
+		return s.count(), nil
 	}
 
-	slog.Info("user store loaded", "users", len(s.users))
-	return nil
+	s.mu.Lock()
+	s.users = users
+	s.mu.Unlock()
+
+	return len(users), nil
+}
+
+func (s *UserStore) count() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.users)
+}
+
+// userStoreReloadInterval bounds how long a revocation made by another API
+// replica takes to apply here.
+const userStoreReloadInterval = 30 * time.Second
+
+// StartPeriodicReload re-reads the persisted user store on an interval, so that
+// a deactivation, deletion, or password change performed by another replica
+// takes effect here within one interval. Without it, revocation only applies to
+// the process that handled the change.
+func (s *UserStore) StartPeriodicReload(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(userStoreReloadInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := s.reload(ctx); err != nil {
+					slog.Warn("user store reload failed", "error", err)
+				}
+			}
+		}
+	}()
 }
 
 // Seed creates the initial admin user if no users exist.
@@ -94,6 +154,9 @@ func (s *UserStore) Create(ctx context.Context, username, password string, role 
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
+
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 
 	s.mu.Lock()
 	if _, exists := s.users[username]; exists {
@@ -159,6 +222,9 @@ func (s *UserStore) ChangePassword(ctx context.Context, username, newPassword st
 		return fmt.Errorf("hash password: %w", err)
 	}
 
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	s.mu.Lock()
 	user, exists := s.users[username]
 	if !exists {
@@ -166,6 +232,9 @@ func (s *UserStore) ChangePassword(ctx context.Context, username, newPassword st
 		return fmt.Errorf("user %q not found", username)
 	}
 	user.PasswordHash = string(hash)
+	// Changing a password is how a user ends a session they no longer trust,
+	// so it must invalidate tokens already issued.
+	user.TokenVersion++
 	s.users[username] = user
 	s.mu.Unlock()
 
@@ -174,6 +243,9 @@ func (s *UserStore) ChangePassword(ctx context.Context, username, newPassword st
 
 // Deactivate disables a user without deleting their stored files.
 func (s *UserStore) Deactivate(ctx context.Context, username string) error {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	s.mu.Lock()
 	user, exists := s.users[username]
 	if !exists {
@@ -182,6 +254,9 @@ func (s *UserStore) Deactivate(ctx context.Context, username string) error {
 	}
 	now := time.Now().UTC()
 	user.DeactivatedAt = &now
+	// Deactivation is checked on every request, but bumping the version also
+	// covers tokens issued before a lockout that is later reversed.
+	user.TokenVersion++
 	s.users[username] = user
 	s.mu.Unlock()
 
@@ -190,6 +265,9 @@ func (s *UserStore) Deactivate(ctx context.Context, username string) error {
 
 // Activate re-enables a deactivated user.
 func (s *UserStore) Activate(ctx context.Context, username string) error {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	s.mu.Lock()
 	user, exists := s.users[username]
 	if !exists {
@@ -205,6 +283,9 @@ func (s *UserStore) Activate(ctx context.Context, username string) error {
 
 // Delete removes a user.
 func (s *UserStore) Delete(ctx context.Context, username string) error {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+
 	s.mu.Lock()
 	if _, exists := s.users[username]; !exists {
 		s.mu.Unlock()
@@ -223,6 +304,11 @@ func (s *UserStore) persist(ctx context.Context) error {
 
 	if err != nil {
 		return err
+	}
+
+	// An unbacked store holds users in memory only and has nowhere to write.
+	if s.client == nil {
+		return nil
 	}
 
 	return s.client.PutObject(ctx, usersKey, bytes.NewReader(data), int64(len(data)), "application/json", nil)

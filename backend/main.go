@@ -63,6 +63,10 @@ func main() {
 			slog.Error("failed to seed admin user", "error", err)
 			os.Exit(1)
 		}
+		// Pick up deactivations and password changes made by other API
+		// replicas; without this, revocation only applies to the process that
+		// handled the change.
+		users.StartPeriodicReload(context.Background())
 
 		// Migrate legacy single-user files to admin namespace.
 		if err := storage.MigrateLegacyPrefix(context.Background(), store, cfg.Username); err != nil {

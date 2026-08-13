@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -37,6 +38,10 @@ type Claims struct {
 	Username string `json:"username"`
 	Role     Role   `json:"role"`
 	Source   Source `json:"source"`
+	// TokenVersion pins the token to the account state it was issued against.
+	// Tokens predating this field decode to 0, which matches accounts that have
+	// never had their version bumped.
+	TokenVersion int `json:"ver,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -82,9 +87,10 @@ func (s *Service) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	s.rateLimiter.Reset(ip)
 
 	claims := &Claims{
-		Username: req.Username,
-		Role:     user.Role,
-		Source:   SourcePassword,
+		Username:     req.Username,
+		Role:         user.Role,
+		Source:       SourcePassword,
+		TokenVersion: user.TokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -139,7 +145,28 @@ func (s *Service) AuthenticateRequest(r *http.Request) (string, Role, error) {
 		return "", "", fmt.Errorf("invalid token")
 	}
 
-	return claims.Username, claims.Role, nil
+	// A valid signature only proves the token was issued; it says nothing about
+	// whether the account still exists or the session is still wanted. Without
+	// this the account could be deactivated, deleted, or have its password
+	// changed and the token would keep working for the rest of its 72 hours,
+	// including for /storage/* downloads via the edge check.
+	user, ok := s.users.Get(claims.Username)
+	if !ok {
+		slog.Warn("rejecting token for unknown user", "user", claims.Username)
+		return "", "", fmt.Errorf("invalid token")
+	}
+	if user.DeactivatedAt != nil {
+		slog.Warn("rejecting token for deactivated user", "user", claims.Username)
+		return "", "", fmt.Errorf("invalid token")
+	}
+	if claims.TokenVersion != user.TokenVersion {
+		slog.Warn("rejecting token from a superseded session", "user", claims.Username)
+		return "", "", fmt.Errorf("invalid token")
+	}
+
+	// The role comes from the stored account rather than the claim, so a
+	// demotion applies to existing sessions immediately.
+	return claims.Username, user.Role, nil
 }
 
 // AdminMiddleware rejects non-admin users.
