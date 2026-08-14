@@ -43,7 +43,7 @@ services:
         mc mb --ignore-existing "reliquary/$$MINIO_BUCKET"
 
   api:
-    image: ghcr.io/scrivver/reliquary-api:v0.2.0
+    image: ghcr.io/scrivver/reliquary-api:v0.4.0
     restart: unless-stopped
     depends_on:
       rabbitmq:
@@ -70,11 +70,19 @@ services:
       AUTH_OIDC_ENABLED: ${AUTH_OIDC_ENABLED:-}
       AUTH_PROXY_ENABLED: ${AUTH_PROXY_ENABLED:-}
       AUTH_NONE_ENABLED: ${AUTH_NONE_ENABLED:-}
+      AUTH_PROXY_SHARED_SECRET: ${AUTH_PROXY_SHARED_SECRET:-}
+      AUTH_PROXY_INSECURE_TRUST_HEADER: ${AUTH_PROXY_INSECURE_TRUST_HEADER:-}
+      # Single-dash default: an unset variable gets the backend's own defaults,
+      # while an explicitly empty one is passed through as empty and trusts no
+      # peer. Keep in sync with defaultTrustedProxies in backend/config/config.go.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES-127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-com.reliquary.app://callback}
       OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_ALLOW_OPAQUE_TOKENS: ${OIDC_ALLOW_OPAQUE_TOKENS:-}
     healthcheck:
       test: ["CMD", "reliquary-api-healthcheck"]
       interval: 5s
@@ -82,7 +90,7 @@ services:
       retries: 12
 
   thumbnail-worker:
-    image: ghcr.io/scrivver/reliquary-thumbnail-worker:v0.2.0
+    image: ghcr.io/scrivver/reliquary-thumbnail-worker:v0.4.0
     restart: unless-stopped
     tmpfs:
       - /tmp:size=512m,mode=1777
@@ -110,7 +118,7 @@ services:
       retries: 3
 
   ingress:
-    image: ghcr.io/scrivver/reliquary-web:v0.2.0
+    image: ghcr.io/scrivver/reliquary-web:v0.4.0
     restart: unless-stopped
     depends_on:
       api:

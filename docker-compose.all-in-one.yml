@@ -43,11 +43,19 @@ services:
       AUTH_OIDC_ENABLED: ${AUTH_OIDC_ENABLED:-}
       AUTH_PROXY_ENABLED: ${AUTH_PROXY_ENABLED:-}
       AUTH_NONE_ENABLED: ${AUTH_NONE_ENABLED:-}
+      AUTH_PROXY_SHARED_SECRET: ${AUTH_PROXY_SHARED_SECRET:-}
+      AUTH_PROXY_INSECURE_TRUST_HEADER: ${AUTH_PROXY_INSECURE_TRUST_HEADER:-}
+      # Single-dash default: an unset variable gets the backend's own defaults,
+      # while an explicitly empty one is passed through as empty and trusts no
+      # peer. Keep in sync with defaultTrustedProxies in backend/config/config.go.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES-127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-com.reliquary.app://callback}
       OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_ALLOW_OPAQUE_TOKENS: ${OIDC_ALLOW_OPAQUE_TOKENS:-}
     volumes:
       - minio_data:/data/minio
 

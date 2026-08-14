@@ -2,7 +2,7 @@
 
 All notable changes to Reliquary are documented in this file.
 
-## [Unreleased]
+## [v0.4.0] - 2026-08-14
 
 ### Security
 
