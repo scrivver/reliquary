@@ -2,6 +2,56 @@
 
 All notable changes to Reliquary are documented in this file.
 
+## [v0.4.2] - 2026-08-14
+
+### Fixed
+
+- **Stale frontend after upgrade**: the bundled ingress served `index.html`,
+  `flutter_bootstrap.js`, `flutter_service_worker.js`, `main.dart.js`, and
+  `version.json` without a `Cache-Control` directive. Flutter does not
+  content-hash those files, so browsers applied heuristic caching and kept
+  running the previous bundle against the upgraded API. The failure was hard to
+  read: only calls whose contract had changed broke, so `/api/*` kept working
+  while `/storage/*` downloads returned `invalid token` — a pre-`v0.4.0` bundle
+  fetches thumbnails with `Image.network`, which sends no `Authorization`
+  header for the edge check added in `v0.4.0`. These files are now served
+  `no-cache`, which still permits a `304`. Browsers that cached the old bundle
+  need one hard reload to pick this up.
+
+### Changed
+
+- The development (`infra/caddy.nix`) and all-in-one (`nix/container.nix`)
+  proxy configs now strip the `Authorization` header explicitly with
+  `header_up -Authorization`, matching the bundled ingress. They previously
+  relied on `copy_headers Authorization` clearing it as a side effect of
+  copying an absent header from the auth response — correct, but stated three
+  different ways across four files, which is how the `v0.4.1` bug reached a
+  release.
+
+### Documentation
+
+- New "Object Storage And Bandwidth" section in `docs/deployment.md` covering
+  which components carry file bytes, and why remote object storage (R2, S3)
+  requires the ingress to run somewhere with high egress rather than on a home
+  uplink. Includes a complete R2 configuration.
+- The bare-metal Caddyfile now states that the `/storage/*` block is a security
+  control that fails open if omitted, and points at the bundled ingress as the
+  supported path.
+- New `docs/direct-storage-download-plan.md`, a rejected-for-now proposal to
+  serve bytes directly from object storage, recorded with its trade-offs and
+  the alternatives considered.
+
+## [v0.4.1] - 2026-08-14
+
+### Fixed
+
+- **Downloads through the bundled ingress**: every `/storage/*` request reached
+  MinIO carrying both the presigned query signature and the caller's
+  `Authorization` header, and MinIO rejects that combination with `request has
+  multiple authentication types`. Caddy now strips the header after
+  `forward_auth` has consumed it. The header is still required for the edge
+  check itself, so downloads continue to fail closed without a valid session.
+
 ## [v0.4.0] - 2026-08-14
 
 ### Security

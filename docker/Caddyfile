@@ -35,9 +35,24 @@
 		}
 	}
 
+	# Flutter does not content-hash these, so without an explicit directive the
+	# browser applies heuristic caching and an upgraded deployment keeps serving
+	# the previous bundle. That fails in a way that is hard to read: an old
+	# bundle talks to a new API, and only the calls whose contract changed
+	# break. `no-cache` still allows a 304, so the cost is a revalidation rather
+	# than a re-download.
+	@bundle path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /main.dart.js /version.json
+
 	handle {
 		root * /srv/web
-		try_files {path} /index.html
-		file_server
+
+		# `route` pins the execution order: Caddy would otherwise sort `header`
+		# ahead of `try_files`, so a deep link like /gallery would be matched on
+		# its original path and served an unmarked index.html.
+		route {
+			try_files {path} /index.html
+			header @bundle Cache-Control "no-cache"
+			file_server
+		}
 	}
 }

@@ -34,12 +34,16 @@
           handle /storage/* {
             forward_auth unix/$BACKEND_SOCK {
               uri /api/auth/check
-              copy_headers Authorization
             }
 
             uri strip_prefix /storage
             reverse_proxy 127.0.0.1:''${MINIO_PORT} {
               header_up Host 127.0.0.1:''${MINIO_PORT}
+              # The client sends a Bearer token for forward_auth above, but the
+              # object itself is authenticated by the presigned query signature.
+              # MinIO rejects a request carrying both with "request has multiple
+              # authentication types", so the token stops here.
+              header_up -Authorization
               header_down -Access-Control-Allow-Origin
               header_down -Access-Control-Allow-Methods
               header_down -Access-Control-Allow-Headers

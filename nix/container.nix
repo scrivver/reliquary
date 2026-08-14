@@ -19,6 +19,11 @@ let
         respond 204
       }
 
+      # Flutter does not content-hash these, so without an explicit directive
+      # the browser applies heuristic caching and an upgraded deployment keeps
+      # serving the previous bundle against the new API.
+      @bundle path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /main.dart.js /version.json
+
       handle /api/* {
         reverse_proxy unix//run/reliquary/backend.sock
       }
@@ -26,12 +31,16 @@ let
       handle /storage/* {
         forward_auth unix//run/reliquary/backend.sock {
           uri /api/auth/check
-          copy_headers Authorization
         }
 
         uri strip_prefix /storage
         reverse_proxy 127.0.0.1:9000 {
           header_up Host 127.0.0.1:9000
+          # The client sends a Bearer token for forward_auth above, but the
+          # object itself is authenticated by the presigned query signature.
+          # MinIO rejects a request carrying both with "request has multiple
+          # authentication types", so the token stops here.
+          header_up -Authorization
           header_down -Access-Control-Allow-Origin
           header_down -Access-Control-Allow-Methods
           header_down -Access-Control-Allow-Headers
@@ -40,8 +49,15 @@ let
 
       handle {
         root * /srv/web
-        file_server
-        try_files {path} /index.html
+
+        # `route` pins the execution order: Caddy would otherwise sort `header`
+        # ahead of `try_files`, so a deep link would be matched on its original
+        # path and served an unmarked index.html.
+        route {
+          try_files {path} /index.html
+          header @bundle Cache-Control "no-cache"
+          file_server
+        }
       }
     }
   '';

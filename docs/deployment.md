@@ -86,6 +86,101 @@ Container configuration is provided through `.env` and consumed by
 | `THUMBNAIL_CONCURRENCY` | `4` | Concurrent thumbnail jobs per worker container |
 | `THUMBNAIL_MAX_ATTEMPTS` | `5` | Attempts before dead-lettering |
 
+## Object Storage And Bandwidth
+
+Reliquary serves every file byte through its own infrastructure. Clients never
+talk to object storage directly: downloads are authorized at the edge by
+`forward_auth` and then streamed object storage → ingress → client. This keeps
+a single origin, avoids any CORS policy on the bucket, and means a leaked
+presigned URL is useless to anyone who cannot also pass the auth check.
+
+The cost of that design is bandwidth, and it decides where you can host.
+
+### Which Components Carry File Bytes
+
+| Component | Traffic | Proportional to |
+|---|---|---|
+| Ingress | Downloads, outbound to clients | Download volume |
+| API | Uploads, outbound to object storage | Upload volume |
+| API | Batch zip downloads | Zip download volume |
+| Thumbnail worker | Reads originals, writes thumbnails | Upload volume |
+
+Downloads are the dominant cost for most deployments, and they are carried by
+the ingress. In the bundled Compose file every component runs on one host, so
+that host carries all of it.
+
+### Local MinIO
+
+With MinIO co-located with the ingress, object storage → ingress is loopback or
+a container network. Only the client-facing hop crosses the WAN, so egress is
+counted once and there is nothing to plan around.
+
+### Remote Object Storage (R2, S3)
+
+With a remote bucket, every downloaded byte crosses the WAN twice: inbound from
+the provider to the ingress, then outbound to the client. Cloudflare R2 charges
+no egress, but that saving is consumed by your own node — you pay your host's
+egress for 100% of download traffic regardless.
+
+**Run the ingress on a host with high egress.** A VPS with generous or
+unmetered transfer is the intended topology.
+
+Do not put the ingress on a home connection when using remote storage. Every
+byte crosses the link twice, and downloads are capped by your **upstream**
+rather than by the provider: on a 500/50 Mbps line, every download runs at
+roughly 50 Mbps no matter how fast R2 is. You would get the durability and
+capacity of remote storage and none of its delivery benefit.
+
+Components can be split. Only the ingress needs high egress for downloads; the
+API and thumbnail worker carry traffic proportional to uploads, which is
+usually far smaller.
+
+### Configuring R2
+
+R2 is S3-compatible and needs no code changes:
+
+```env
+MINIO_ENDPOINT=<ACCOUNT_ID>.r2.cloudflarestorage.com
+MINIO_USE_SSL=true
+MINIO_ACCESS_KEY=<R2 API token access key>
+MINIO_SECRET_KEY=<R2 API token secret>
+MINIO_BUCKET=reliquary
+```
+
+Remove the `minio` and `minio-init` services from `docker-compose.yml` and
+create the bucket in the R2 dashboard instead.
+
+R2 defines its bucket region as `auto` and treats an empty region as an alias
+for it, so no region setting is required.
+
+The ingress must send the bucket hostname as `Host`. SigV4 binds the hostname
+into the signature, so forwarding the client's `Host` produces
+`SignatureDoesNotMatch`:
+
+```caddyfile
+reverse_proxy https://<ACCOUNT_ID>.r2.cloudflarestorage.com {
+  header_up Host <ACCOUNT_ID>.r2.cloudflarestorage.com
+  header_up -Authorization
+  header_down -Access-Control-Allow-Origin
+  header_down -Access-Control-Allow-Methods
+  header_down -Access-Control-Allow-Headers
+}
+```
+
+`header_up -Authorization` is required. The client sends a Bearer token for the
+`forward_auth` check, but the object is authenticated by the presigned query
+signature, and object storage rejects a request carrying both with `request has
+multiple authentication types`.
+
+No CORS policy is needed on the bucket, because the browser only ever talks to
+the Reliquary origin. This also avoids a documented R2 behaviour: expired
+presigned URLs are returned without CORS headers, so browser scripts cannot
+read the error. Serving through the ingress sidesteps that entirely.
+
+Note that `ListObjects` is a Class A operation on R2 and is billed at a higher
+rate than reads. See `file-index-manifest-plan.md` for the plan to stop calling
+it on normal file listings.
+
 ## Mobile Apps
 
 Build native apps that connect to your Reliquary instance:
@@ -271,6 +366,18 @@ flutter build web --release
 
 ### Configure And Run Caddy
 
+> **The `/storage/*` block is a security control, not routing.** Object
+> ownership is enforced by the `forward_auth` call below: it is the only thing
+> stopping one user downloading another's files. A proxy that routes
+> `/storage/*` to object storage *without* it fails open — every presigned URL
+> becomes readable by anyone holding the link, with no error to notice.
+>
+> Prefer fronting the bundled ingress instead of reproducing this. The
+> `reliquary-web` image already contains a maintained copy of this config, so
+> an external proxy (nginx, Traefik, a CDN) only needs to forward everything to
+> its port. Reimplement the block below only if you are running without
+> containers, and treat it as security-sensitive when you do.
+
 Create a `Caddyfile`:
 
 ```caddyfile
@@ -282,12 +389,16 @@ Create a `Caddyfile`:
   handle /storage/* {
     forward_auth unix//tmp/reliquary-backend.sock {
       uri /api/auth/check
-      copy_headers Authorization
     }
 
     uri strip_prefix /storage
     reverse_proxy 127.0.0.1:9000 {
       header_up Host 127.0.0.1:9000
+      # Required. The client sends a Bearer token for the check above, but the
+      # object is authenticated by the presigned query signature, and object
+      # storage rejects a request carrying both with "request has multiple
+      # authentication types".
+      header_up -Authorization
       header_down -Access-Control-Allow-Origin
       header_down -Access-Control-Allow-Methods
       header_down -Access-Control-Allow-Headers
@@ -296,6 +407,12 @@ Create a `Caddyfile`:
 
   handle {
     root * frontend/build/web
+
+    # Flutter does not content-hash these, so without this the browser applies
+    # heuristic caching and keeps serving the previous bundle after an upgrade.
+    @bundle path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /main.dart.js /version.json
+    header @bundle Cache-Control "no-cache"
+
     file_server
     try_files {path} /index.html
   }
