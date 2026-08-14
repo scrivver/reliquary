@@ -43,7 +43,7 @@ services:
         mc mb --ignore-existing "reliquary/$$MINIO_BUCKET"
 
   api:
-    image: ghcr.io/scrivver/reliquary-api:v0.4.0
+    image: ghcr.io/scrivver/reliquary-api:v0.4.1
     restart: unless-stopped
     depends_on:
       rabbitmq:
@@ -90,7 +90,7 @@ services:
       retries: 12
 
   thumbnail-worker:
-    image: ghcr.io/scrivver/reliquary-thumbnail-worker:v0.4.0
+    image: ghcr.io/scrivver/reliquary-thumbnail-worker:v0.4.1
     restart: unless-stopped
     tmpfs:
       - /tmp:size=512m,mode=1777
@@ -118,7 +118,7 @@ services:
       retries: 3
 
   ingress:
-    image: ghcr.io/scrivver/reliquary-web:v0.4.0
+    image: ghcr.io/scrivver/reliquary-web:v0.4.1
     restart: unless-stopped
     depends_on:
       api:
