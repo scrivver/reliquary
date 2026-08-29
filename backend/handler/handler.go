@@ -151,6 +151,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
+	displayName := storedName
 	baseName := strings.TrimSuffix(storedName, path.Ext(storedName))
 	ext := path.Ext(storedName)
 	fileKey := fmt.Sprintf("files/%s/%d/%02d/%s", username, now.Year(), now.Month(), storedName)
@@ -161,7 +162,8 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			break
 		}
-		fileKey = fmt.Sprintf("files/%s/%d/%02d/%s_%d%s", username, now.Year(), now.Month(), baseName, i, ext)
+		displayName = fmt.Sprintf("%s_%d%s", baseName, i, ext)
+		fileKey = fmt.Sprintf("files/%s/%d/%02d/%s", username, now.Year(), now.Month(), displayName)
 	}
 
 	data, err := io.ReadAll(file)
@@ -192,6 +194,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		warning, err := h.publishUploadEffects(
 			r.Context(),
 			existingKey,
+			storedName,
 			existingContentType,
 			checksum,
 		)
@@ -240,7 +243,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	warning, err := h.publishUploadEffects(r.Context(), fileKey, contentType, checksum)
+	warning, err := h.publishUploadEffects(r.Context(), fileKey, displayName, contentType, checksum)
 	if err != nil {
 		slog.Error("failed to publish upload effects", "key", fileKey, "error", err)
 		httpError(w, "file stored but background work could not be published; retry upload", http.StatusServiceUnavailable)
@@ -396,15 +399,18 @@ func (h *Handler) emitDelete(ctx context.Context, key string) error {
 	})
 }
 
-func (h *Handler) emitCreate(ctx context.Context, key, checksum string) error {
+func (h *Handler) emitCreate(ctx context.Context, key, displayName, checksum string) error {
 	stat, err := h.store.StatObject(ctx, key)
 	if err != nil {
 		return fmt.Errorf("stat uploaded object: %w", err)
 	}
+	if displayName == "" {
+		displayName = path.Base(key)
+	}
 	return h.events.Emit(ctx, event.FileEvent{
 		Event:       event.Create,
 		FilePath:    key,
-		Filename:    path.Base(key),
+		Filename:    displayName,
 		Size:        stat.Size,
 		Hash:        "sha256:" + checksum,
 		Mtime:       stat.LastModified.UTC().Format(time.RFC3339),
@@ -416,6 +422,7 @@ func (h *Handler) emitCreate(ctx context.Context, key, checksum string) error {
 func (h *Handler) publishUploadEffects(
 	ctx context.Context,
 	key string,
+	displayName string,
 	contentType string,
 	checksum string,
 ) (string, error) {
@@ -431,7 +438,7 @@ func (h *Handler) publishUploadEffects(
 			warning = "thumbnail generation is pending because background work is unavailable"
 		}
 	}
-	if err := h.emitCreate(ctx, key, checksum); err != nil {
+	if err := h.emitCreate(ctx, key, displayName, checksum); err != nil {
 		return warning, fmt.Errorf("publish create event: %w", err)
 	}
 	return warning, nil
@@ -855,6 +862,9 @@ func sanitizeFilename(name string) string {
 // sanitizePath cleans a relative path for safe storage.
 // Prevents directory traversal and removes leading slashes.
 func sanitizePath(p string) string {
+	// Normalize backslash separators to forward slashes so path.Clean can
+	// resolve window-style .. segments regardless of upload client platform.
+	p = strings.ReplaceAll(p, "\\", "/")
 	// Clean the path to resolve .. and .
 	cleaned := path.Clean(p)
 	// Remove leading slashes and dots

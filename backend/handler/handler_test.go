@@ -490,7 +490,8 @@ func TestEmitCreateUsesCanonicalS3Metadata(t *testing.T) {
 
 	err := h.emitCreate(
 		context.Background(),
-		"files/alice/2026/06/report.pdf",
+		"files/alice/2026/06/docs/report.pdf",
+		"docs/report.pdf",
 		"abcdef123456",
 	)
 	if err != nil {
@@ -501,8 +502,8 @@ func TestEmitCreateUsesCanonicalS3Metadata(t *testing.T) {
 	}
 	got := emitter.events[0]
 	if got.Event != event.Create ||
-		got.FilePath != "files/alice/2026/06/report.pdf" ||
-		got.Filename != "report.pdf" ||
+		got.FilePath != "files/alice/2026/06/docs/report.pdf" ||
+		got.Filename != "docs/report.pdf" ||
 		got.Size != 204800 ||
 		got.Hash != "sha256:abcdef123456" ||
 		got.Mtime != "2026-06-15T04:00:00Z" ||
@@ -522,7 +523,7 @@ func TestEmitCreatePropagatesPublisherFailure(t *testing.T) {
 		deviceName: "reliquary",
 	}
 
-	err := h.emitCreate(context.Background(), "files/alice/a.txt", "abc")
+	err := h.emitCreate(context.Background(), "files/alice/a.txt", "a.txt", "abc")
 	if !errors.Is(err, publishErr) {
 		t.Fatalf("got %v, want %v", err, publishErr)
 	}
@@ -576,6 +577,154 @@ func TestUploadStoresBeforePublishing(t *testing.T) {
 		thumbs.jobs[0].ContentType != "image/png" ||
 		thumbs.jobs[0].Checksum == "" {
 		t.Fatalf("unexpected thumbnail jobs: %+v", thumbs.jobs)
+	}
+}
+
+func TestUploadEmitsFolderDisplayPath(t *testing.T) {
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	emitter := &fakeEmitter{}
+	h := &Handler{
+		store:      store,
+		files:      &fakeFileIndex{},
+		thumbs:     &fakeThumbnailPublisher{},
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "myfile.pdf", "application/pdf", []byte("hello"), "docs/myfile.pdf")
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 {
+		t.Fatalf("events=%d, want 1", len(emitter.events))
+	}
+	got := emitter.events[0]
+	if got.Filename != "docs/myfile.pdf" {
+		t.Fatalf("filename=%q, want docs/myfile.pdf", got.Filename)
+	}
+	if !strings.HasSuffix(got.FilePath, "/docs/myfile.pdf") {
+		t.Fatalf("file_path=%q, want folder storage key", got.FilePath)
+	}
+}
+
+func TestUploadEmitsBasenameDisplayPathWithoutFolderPath(t *testing.T) {
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	emitter := &fakeEmitter{}
+	h := &Handler{
+		store:      store,
+		files:      &fakeFileIndex{},
+		thumbs:     &fakeThumbnailPublisher{},
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "report.pdf", "application/pdf", []byte("hello"))
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 || emitter.events[0].Filename != "report.pdf" {
+		t.Fatalf("unexpected events: %+v", emitter.events)
+	}
+}
+
+func TestUploadSanitizesUnsafeRelativePathBeforeEmitting(t *testing.T) {
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	emitter := &fakeEmitter{}
+	h := &Handler{
+		store:      store,
+		files:      &fakeFileIndex{},
+		thumbs:     &fakeThumbnailPublisher{},
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "myfile.pdf", "application/pdf", []byte("hello"), "../../docs//unsafe/../myfile.pdf")
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 {
+		t.Fatalf("events=%d, want 1", len(emitter.events))
+	}
+	got := emitter.events[0]
+	if got.Filename != "docs/myfile.pdf" {
+		t.Fatalf("filename=%q, want sanitized display path", got.Filename)
+	}
+	if !strings.HasSuffix(got.FilePath, "/docs/myfile.pdf") {
+		t.Fatalf("file_path=%q, want sanitized storage key", got.FilePath)
+	}
+}
+
+func TestUploadSanitizesBackslashTraversalInPathBeforeEmitting(t *testing.T) {
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	emitter := &fakeEmitter{}
+	h := &Handler{
+		store:      store,
+		files:      &fakeFileIndex{},
+		thumbs:     &fakeThumbnailPublisher{},
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "evil.pdf", "application/pdf", []byte("hello"), `..\..\evil.pdf`)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 {
+		t.Fatalf("events=%d, want 1", len(emitter.events))
+	}
+	got := emitter.events[0]
+	if got.Filename != "evil.pdf" {
+		t.Fatalf("filename=%q, want sanitized basename without traversal", got.Filename)
+	}
+	if strings.Contains(got.FilePath, "..") {
+		t.Fatalf("file_path=%q, want traversal segments resolved", got.FilePath)
+	}
+}
+
+func TestUploadSanitizesBackslashFolderPathBeforeEmitting(t *testing.T) {
+	store := &recordingFileStore{objects: make(map[string]minio.ObjectInfo)}
+	emitter := &fakeEmitter{}
+	h := &Handler{
+		store:      store,
+		files:      &fakeFileIndex{},
+		thumbs:     &fakeThumbnailPublisher{},
+		checksums:  &fakeChecksumIndex{existing: make(map[string]string)},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "myfile.pdf", "application/pdf", []byte("hello"), `docs\myfile.pdf`)
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 {
+		t.Fatalf("events=%d, want 1", len(emitter.events))
+	}
+	got := emitter.events[0]
+	if got.Filename != "docs/myfile.pdf" {
+		t.Fatalf("filename=%q, want folder display path with forward slashes", got.Filename)
+	}
+	if !strings.HasSuffix(got.FilePath, "/docs/myfile.pdf") {
+		t.Fatalf("file_path=%q, want forward-slash storage key", got.FilePath)
 	}
 }
 
@@ -638,6 +787,47 @@ func TestDuplicateUploadRepublishesCreate(t *testing.T) {
 	}
 	if len(thumbs.jobs) != 1 || thumbs.jobs[0].FileKey != existingKey {
 		t.Fatalf("unexpected thumbnail jobs: %+v", thumbs.jobs)
+	}
+}
+
+func TestDuplicateFolderUploadPreservesDisplayPath(t *testing.T) {
+	data := []byte("hello")
+	sum := sha256.Sum256(data)
+	checksum := hex.EncodeToString(sum[:])
+	existingKey := "files/alice/2026/07/docs/notes/report.pdf"
+	emitter := &fakeEmitter{}
+	store := &recordingFileStore{objects: map[string]minio.ObjectInfo{
+		existingKey: {
+			Key:          existingKey,
+			Size:         int64(len(data)),
+			LastModified: time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC),
+			ContentType:  "application/pdf",
+		},
+	}}
+	h := &Handler{
+		store:      store,
+		thumbs:     &fakeThumbnailPublisher{},
+		checksums:  &fakeChecksumIndex{existing: map[string]string{checksum: existingKey}},
+		events:     emitter,
+		deviceName: "reliquary",
+	}
+
+	req := multipartUploadRequest(t, "report.pdf", "application/pdf", data, "docs/notes/report.pdf")
+	res := httptest.NewRecorder()
+	auth.NoAuthMiddleware("alice")(http.HandlerFunc(h.Upload)).ServeHTTP(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
+	}
+	if len(emitter.events) != 1 {
+		t.Fatalf("events=%d, want 1", len(emitter.events))
+	}
+	got := emitter.events[0]
+	if got.FilePath != existingKey {
+		t.Fatalf("file_path=%q, want existing storage key", got.FilePath)
+	}
+	if got.Filename != "docs/notes/report.pdf" {
+		t.Fatalf("filename=%q, want folder display path preserved across dedup", got.Filename)
 	}
 }
 
@@ -741,6 +931,7 @@ func multipartUploadRequest(
 	filename string,
 	contentType string,
 	data []byte,
+	relativePath ...string,
 ) *http.Request {
 	t.Helper()
 	var body bytes.Buffer
@@ -751,6 +942,11 @@ func multipartUploadRequest(
 	}
 	if _, err := part.Write(data); err != nil {
 		t.Fatal(err)
+	}
+	if len(relativePath) > 0 && relativePath[0] != "" {
+		if err := writer.WriteField("path", relativePath[0]); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
