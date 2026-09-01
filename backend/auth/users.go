@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-
-	"reliquary-be/storage"
 )
 
 const usersKey = "admin/users.json"
@@ -39,8 +37,17 @@ type User struct {
 	TokenVersion int `json:"token_version,omitempty"`
 }
 
+// objectStore is the slice of object storage the user store needs. Declaring
+// it here rather than taking a *storage.Client keeps the persistence round trip
+// substitutable in tests, mirroring archiveStore in
+// backend/storage/restore_archive.go.
+type objectStore interface {
+	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
+	PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string, userMeta map[string]string) error
+}
+
 type UserStore struct {
-	client *storage.Client
+	client objectStore
 	mu     sync.RWMutex
 	users  map[string]User // username → User
 	// saveMu serializes read-modify-persist sequences against each other and
@@ -49,7 +56,7 @@ type UserStore struct {
 	saveMu sync.Mutex
 }
 
-func NewUserStore(client *storage.Client) *UserStore {
+func NewUserStore(client objectStore) *UserStore {
 	return &UserStore{
 		client: client,
 		users:  make(map[string]User),
