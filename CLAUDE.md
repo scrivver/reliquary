@@ -123,6 +123,9 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 | `OIDC_AUDIENCE` | `OIDC_CLIENT_ID` | Required `aud` claim on access tokens |
 | `OIDC_ALLOW_OPAQUE_TOKENS` | `false` | Accept non-JWT access tokens, which cannot be audience-checked |
 | `OIDC_USERNAME_CLAIM` | `preferred_username` | Claim used as the Reliquary username |
+| `STORAGE_INSECURE_SKIP_CAS_PREFLIGHT` | `false` | Skip the startup check that the backend enforces conditional writes |
+| `USER_SYNC_ENABLED` | `true` | Publish/consume user store invalidation hints |
+| `USER_SYNC_EXCHANGE` | `reliquary.userstore` | Fanout exchange for user store invalidation |
 | `RABBITMQ_URL` | `amqp://guest:guest@127.0.0.1:5672` | Engram event broker |
 | `EVENT_QUEUE` | `engram.ingest` | Predeclared queue and routing key |
 | `EVENT_DEVICE_NAME` | `reliquary` | Canonical event producer name |
@@ -140,6 +143,23 @@ Default auth credentials: `admin` / `admin` (configurable via `AUTH_USERNAME` an
 - **Unix socket for backend**: The Go backend listens on a unix socket (`$DATA_DIR/backend.sock`) by default when `LISTEN_ADDR` is set to a path. Caddy proxies to it. TCP mode is also supported.
 - **Multi-user with app-level auth**: Users managed via JSON file in MinIO (`admin/users.json`) with bcrypt hashing. Each user gets an isolated namespace (`{username}/files/`, `{username}/thumbs/`, etc.). No MinIO IAM — the backend is the single gatekeeper. Usernames are validated against `^[a-zA-Z0-9._-]{1,64}$` before they reach an object key.
 - **Revocable sessions**: Every authenticated request re-checks the account behind the JWT, so deactivation, deletion, and role changes apply immediately rather than at token expiry. Password changes and deactivations bump a per-user `token_version` that each token records at login, superseding older tokens. The store is re-read from MinIO every 30s so revocation propagates across API replicas.
+- **Compare-and-swap user store**: `admin/users.json` is rewritten whole on every
+  change and is written by more than one process (the API and `reliquary-user`),
+  so a writer working from a stale snapshot used to revert everything written
+  since it loaded. Every mutation is now conditional on the ETag it was derived
+  from, retrying against a fresh snapshot on conflict, so a stale write is
+  refused rather than silently winning. A startup preflight verifies the backend
+  actually enforces `If-Match` — one that accepts the header and ignores it
+  would reintroduce the defect with every test still passing — and refuses to
+  start otherwise.
+- **User store invalidation**: After a successful write, the new version is
+  announced on the `reliquary.userstore` fanout exchange so other replicas
+  reload at once instead of waiting out the 30s timer. Strictly an optimisation:
+  correctness comes from the conditional write, publishes are non-mandatory and
+  transient, a failure to announce never fails the mutation, and the periodic
+  reload remains the backstop. Each replica declares its own exclusive,
+  auto-delete queue at runtime — the one queue in the codebase not predeclared
+  in the infrastructure definitions, because it is per-connection by nature.
 - **Deduplication**: SHA-256 checksum computed on upload. Per-user checksum index stored in MinIO. Duplicates return the existing key without re-uploading.
 - **Metadata on objects**: Checksum, upload date, and original filename stored as MinIO user metadata (X-Amz-Meta-*). No external database needed.
 - **Durable thumbnail generation**: The API publishes confirmed jobs to

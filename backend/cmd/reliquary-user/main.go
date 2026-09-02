@@ -10,6 +10,7 @@ import (
 	"reliquary-be/auth"
 	"reliquary-be/config"
 	"reliquary-be/storage"
+	"reliquary-be/usersync"
 )
 
 const passwordEnv = "RELIQUARY_USER_PASSWORD"
@@ -62,8 +63,32 @@ func create(args []string, role auth.Role) error {
 	if err != nil {
 		return fmt.Errorf("connect to object storage: %w", err)
 	}
+	if err := storage.EnsureConditionalWrites(context.Background(), store, cfg.StorageSkipCASPreflight); err != nil {
+		return err
+	}
 
 	users := auth.NewUserStore(store)
+
+	// Tell the running replicas to re-read, so a CLI change applies at once
+	// rather than after the next periodic reload.
+	//
+	// Best effort on purpose: this tool needs only bucket access, and it is the
+	// break-glass path for a deployment whose API is down. Requiring a reachable
+	// broker would be a real regression in what it can be used for. The write
+	// itself is already safe under compare-and-swap.
+	if cfg.UserSyncEnabled {
+		publisher, err := usersync.NewPublisher(cfg.RabbitMQURL, cfg.UserSyncExchange, usersync.NewOrigin("cli"))
+		if err != nil {
+			slog.Warn(
+				"could not announce the change; running replicas will pick it up on their next reload",
+				"error", err,
+			)
+		} else {
+			defer publisher.Close()
+			users.SetChangeNotifier(publisher)
+		}
+	}
+
 	if err := users.Load(context.Background()); err != nil {
 		return fmt.Errorf("load user store: %w", err)
 	}

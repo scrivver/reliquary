@@ -21,6 +21,7 @@ import (
 	"reliquary-be/handler"
 	"reliquary-be/storage"
 	"reliquary-be/thumbnail"
+	"reliquary-be/usersync"
 )
 
 func main() {
@@ -39,6 +40,12 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("connected to MinIO", "endpoint", cfg.MinIOEndpoint, "bucket", cfg.MinIOBucket)
+
+	if err := storage.EnsureConditionalWrites(context.Background(), store, cfg.StorageSkipCASPreflight); err != nil {
+		slog.Error("object storage preflight failed", "error", err)
+		os.Exit(1)
+	}
+
 	fileIndex := storage.NewFileIndex(store)
 
 	slog.Info(
@@ -65,8 +72,29 @@ func main() {
 		}
 		// Pick up deactivations and password changes made by other API
 		// replicas; without this, revocation only applies to the process that
-		// handled the change.
+		// handled the change. This remains the backstop even with invalidation
+		// enabled below, which is what lets that channel be best-effort.
 		users.StartPeriodicReload(context.Background())
+
+		// Announce and react to user store changes so replicas converge in a
+		// round trip rather than waiting out the reload interval.
+		if cfg.UserSyncEnabled {
+			origin := usersync.NewOrigin("api")
+			publisher, err := usersync.NewPublisher(cfg.RabbitMQURL, cfg.UserSyncExchange, origin)
+			if err != nil {
+				// Not fatal: conditional writes keep the store correct without
+				// this, and the periodic reload still converges.
+				slog.Warn(
+					"user store invalidation unavailable; replicas will converge on the periodic reload",
+					"error", err,
+				)
+			} else {
+				defer publisher.Close()
+				users.SetChangeNotifier(publisher)
+				go usersync.NewSubscriber(cfg.RabbitMQURL, cfg.UserSyncExchange, origin, users).Run(context.Background())
+				slog.Info("user store invalidation ready", "exchange", cfg.UserSyncExchange, "origin", origin)
+			}
+		}
 
 		// Migrate legacy single-user files to admin namespace.
 		if err := storage.MigrateLegacyPrefix(context.Background(), store, cfg.Username); err != nil {

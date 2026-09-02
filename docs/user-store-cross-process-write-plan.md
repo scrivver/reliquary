@@ -258,11 +258,31 @@ Costs to account for:
 
 ## Recommendation
 
-Option B, with the storage seam landed first.
+**Superseded — Option A was chosen.** See
+[user-store-cas-fix-plan.md](./user-store-cas-fix-plan.md) for the execution
+plan.
 
-Option A is the better engineering answer and should be revisited if backend
-portability requirements ever relax, or if the file and checksum indexes hit the
-same defect under real load.
+The original recommendation here was Option B, with the storage seam landed
+first, on the grounds that Option A was blocked by the S3-portability Non-Goal.
+
+That call was reversed deliberately. Two things changed:
+
+1. The portability constraint was set aside as an explicit decision rather than
+   an assumed hard limit.
+2. Conditional-write support was *verified* rather than assumed — probed against
+   the MinIO build actually in use (`2025-10-15T17-29-55Z`, `minio-go v7.0.99`):
+   CAS with a current ETag succeeds, a stale ETag is rejected `PreconditionFailed`
+   / 412, and `If-None-Match: *` gives create-only semantics. AWS S3 added both
+   in 2024.
+
+Option A was always "the better engineering answer" by this document's own
+assessment; the blocker was portability, and that is now an accepted cost with a
+proposed startup preflight to keep it from failing silently. The fix is paired
+with a fanout invalidation channel so replicas converge in milliseconds instead
+of waiting out the 30s reload.
+
+The original Option B analysis below is retained as the record of the road not
+taken.
 
 ## Prerequisite — Storage Seam
 

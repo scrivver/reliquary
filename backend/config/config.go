@@ -22,6 +22,14 @@ type Config struct {
 	MinIOBucket    string
 	MinIOUseSSL    bool
 
+	// StorageSkipCASPreflight opts out of the startup check that the object
+	// storage backend enforces conditional writes. The check exists because a
+	// backend that accepts If-Match and ignores it fails silently: writes
+	// succeed, no error is raised, and concurrent writers revert each other.
+	// Set this only on a backend known to lack the feature, accepting that
+	// risk.
+	StorageSkipCASPreflight bool
+
 	// Auth
 	AuthMode            string // "full" (JWT), "proxy" (trust header), "none" (single user), "oidc" (OIDC token validation)
 	PasswordAuthEnabled bool
@@ -55,6 +63,13 @@ type Config struct {
 	// and therefore cannot be audience-checked.
 	OIDCAllowOpaqueTokens bool
 
+	// User store replication
+	// UserSyncEnabled publishes and consumes user-store invalidation hints so
+	// replicas converge in a round trip instead of one reload interval. It is
+	// an optimisation: with it off, correctness is unchanged.
+	UserSyncEnabled  bool
+	UserSyncExchange string
+
 	// File events
 	EventsEnabled   bool
 	RabbitMQURL     string
@@ -85,10 +100,12 @@ func Load() (*Config, error) {
 		MinIOSecretKey: envOr("MINIO_SECRET_KEY", envOr("MINIO_ROOT_PASSWORD", "minioadmin")),
 		MinIOBucket:    envOr("MINIO_BUCKET", "reliquary"),
 		MinIOUseSSL:    strings.ToLower(envOr("MINIO_USE_SSL", "false")) == "true",
-		AuthMode:       strings.ToLower(envOr("AUTH_MODE", "full")),
-		JWTSecret:      envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
-		Username:       envOr("AUTH_USERNAME", "admin"),
-		Password:       envOr("AUTH_PASSWORD", "admin"),
+
+		StorageSkipCASPreflight: envOrBool("STORAGE_INSECURE_SKIP_CAS_PREFLIGHT", false),
+		AuthMode:                strings.ToLower(envOr("AUTH_MODE", "full")),
+		JWTSecret:               envOr("JWT_SECRET", "reliquary-dev-secret-change-me"),
+		Username:                envOr("AUTH_USERNAME", "admin"),
+		Password:                envOr("AUTH_PASSWORD", "admin"),
 
 		ProxySharedSecret:        envOr("AUTH_PROXY_SHARED_SECRET", ""),
 		ProxyTrustHeaderInsecure: envOrBool("AUTH_PROXY_INSECURE_TRUST_HEADER", false),
@@ -100,6 +117,9 @@ func Load() (*Config, error) {
 
 		OIDCAudience:          envOr("OIDC_AUDIENCE", ""),
 		OIDCAllowOpaqueTokens: envOrBool("OIDC_ALLOW_OPAQUE_TOKENS", false),
+
+		UserSyncEnabled:  envOrBool("USER_SYNC_ENABLED", true),
+		UserSyncExchange: envOr("USER_SYNC_EXCHANGE", "reliquary.userstore"),
 
 		EventsEnabled:   envOrBool("EVENTS_ENABLED", true),
 		RabbitMQURL:     envOr("RABBITMQ_URL", "amqp://guest:guest@127.0.0.1:5672"),

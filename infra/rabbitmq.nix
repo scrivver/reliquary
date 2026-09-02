@@ -26,6 +26,18 @@ let
       "reliquary.thumbnail"
       "reliquary.thumbnail.dead"
     ];
+    # Fanout carrying user-store invalidation hints. Each API replica declares
+    # its own exclusive, auto-delete queue at runtime and binds it here, so no
+    # queue or binding for this exchange can be predeclared.
+    exchanges = [ {
+      name = "reliquary.userstore";
+      vhost = "/";
+      type = "fanout";
+      durable = true;
+      auto_delete = false;
+      internal = false;
+      arguments = {};
+    } ];
     bindings = map (name: {
       source = "amq.direct";
       vhost = "/";

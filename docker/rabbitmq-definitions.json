@@ -21,6 +21,17 @@
       "read": ".*"
     }
   ],
+  "exchanges": [
+    {
+      "name": "reliquary.userstore",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
   "queues": [
     {
       "name": "engram.ingest",

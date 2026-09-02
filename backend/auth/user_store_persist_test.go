@@ -1,47 +1,91 @@
 package auth
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"testing"
+
+	"reliquary-be/storage"
 )
 
-// fakeObjectStore is one in-memory "bucket": a byte slice per key. Two
-// UserStores constructed over the same fakeObjectStore stand in for two
+// fakeObjectStore is one in-memory "bucket": a versioned byte slice per key.
+// Two UserStores constructed over the same fakeObjectStore stand in for two
 // processes sharing one bucket.
+//
+// It enforces the same conditional-write contract as storage.Client, verified
+// against a live MinIO in storage/conditional_integration_test.go. If the two
+// ever drift, that integration test is the one that catches it.
 type fakeObjectStore struct {
 	mu      sync.Mutex
-	objects map[string][]byte
+	objects map[string]fakeObject
+
+	// puts counts accepted and refused writes, so a test can assert that a
+	// terminal error never reached storage.
+	puts int
+	// failNextPuts forces the next n writes to be refused as conflicts,
+	// making the retry path reachable without goroutines or timing.
+	failNextPuts int
+	etagSeq      int
+}
+
+type fakeObject struct {
+	data []byte
+	etag string
 }
 
 func newFakeObjectStore() *fakeObjectStore {
-	return &fakeObjectStore{objects: make(map[string][]byte)}
+	return &fakeObjectStore{objects: make(map[string]fakeObject)}
 }
 
-func (f *fakeObjectStore) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
+func (f *fakeObjectStore) GetObjectWithETag(ctx context.Context, key string) ([]byte, string, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	data, ok := f.objects[key]
+	obj, ok := f.objects[key]
 	if !ok {
-		return nil, fmt.Errorf("object %q not found", key)
+		return nil, "", false, nil
 	}
-	return io.NopCloser(bytes.NewReader(append([]byte(nil), data...))), nil
+	return append([]byte(nil), obj.data...), obj.etag, true, nil
 }
 
-func (f *fakeObjectStore) PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string, userMeta map[string]string) error {
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return err
-	}
-
+func (f *fakeObjectStore) PutObjectIfUnchanged(
+	ctx context.Context,
+	key string,
+	data []byte,
+	contentType string,
+	expectedETag string,
+) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.objects[key] = data
-	return nil
+
+	f.puts++
+	if f.failNextPuts > 0 {
+		f.failNextPuts--
+		return "", fmt.Errorf("%w: forced by test", storage.ErrPreconditionFailed)
+	}
+
+	current, exists := f.objects[key]
+	switch {
+	case expectedETag == "" && exists:
+		// Create-only against an existing object.
+		return "", fmt.Errorf("%w: %q already exists", storage.ErrPreconditionFailed, key)
+	case expectedETag != "" && !exists:
+		return "", fmt.Errorf("%w: %q does not exist", storage.ErrPreconditionFailed, key)
+	case expectedETag != "" && expectedETag != current.etag:
+		return "", fmt.Errorf("%w: %q changed since it was read", storage.ErrPreconditionFailed, key)
+	}
+
+	f.etagSeq++
+	etag := fmt.Sprintf("etag-%d", f.etagSeq)
+	f.objects[key] = fakeObject{data: append([]byte(nil), data...), etag: etag}
+	return etag, nil
+}
+
+func (f *fakeObjectStore) putCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.puts
 }
 
 // TestUserStore_CrossProcessLostUpdate states the ordering directly: the second
