@@ -78,22 +78,19 @@ func main() {
 
 		// Announce and react to user store changes so replicas converge in a
 		// round trip rather than waiting out the reload interval.
+		//
+		// Neither side is allowed to fail startup, and neither connects
+		// eagerly: on a cold start the broker can answer its healthcheck before
+		// the exchange has been declared from the definitions file. The
+		// notifier connects on first use and the subscriber retries, so both
+		// recover on their own once the broker is ready.
 		if cfg.UserSyncEnabled {
 			origin := usersync.NewOrigin("api")
-			publisher, err := usersync.NewPublisher(cfg.RabbitMQURL, cfg.UserSyncExchange, origin)
-			if err != nil {
-				// Not fatal: conditional writes keep the store correct without
-				// this, and the periodic reload still converges.
-				slog.Warn(
-					"user store invalidation unavailable; replicas will converge on the periodic reload",
-					"error", err,
-				)
-			} else {
-				defer publisher.Close()
-				users.SetChangeNotifier(publisher)
-				go usersync.NewSubscriber(cfg.RabbitMQURL, cfg.UserSyncExchange, origin, users).Run(context.Background())
-				slog.Info("user store invalidation ready", "exchange", cfg.UserSyncExchange, "origin", origin)
-			}
+			notifier := usersync.NewNotifier(cfg.RabbitMQURL, cfg.UserSyncExchange, origin)
+			defer notifier.Close()
+			users.SetChangeNotifier(notifier)
+			go usersync.NewSubscriber(cfg.RabbitMQURL, cfg.UserSyncExchange, origin, users).Run(context.Background())
+			slog.Info("user store invalidation enabled", "exchange", cfg.UserSyncExchange, "origin", origin)
 		}
 
 		// Migrate legacy single-user files to admin namespace.

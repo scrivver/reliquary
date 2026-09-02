@@ -2,6 +2,85 @@
 
 All notable changes to Reliquary are documented in this file.
 
+## [v0.5.0] - 2026-09-02
+
+### Fixed
+
+- **Lost updates to the user store**: `admin/users.json` is rewritten whole on
+  every change, and it has two writers — the API server and `reliquary-user`.
+  A writer working from a stale snapshot did not drop one field; it restored its
+  entire snapshot over everything written since it loaded, with no error and no
+  log line. A password change could be silently reverted, leaving the superseded
+  password working; a deactivated account could come back live; an account
+  created by the CLI could disappear.
+
+  Every mutation is now conditional on the ETag it was derived from and retries
+  against a freshly read snapshot on conflict, so a stale write is refused
+  rather than silently winning. Two races are closed as a side effect:
+  concurrent `Create` of the same username now yields one success and one clean
+  error instead of two apparent successes, and replicas racing to seed the first
+  admin produce exactly one account.
+
+  The defect was reachable in two directions with different exposure. A CLI
+  invocation overlapping an API mutation is a sub-second window. The reverse —
+  an API mutation within the 30s reload interval *after* a CLI run has already
+  exited — is far wider and needs no overlap at all, which makes a routine
+  `reliquary-user create-user` against a live server the most likely way to have
+  hit this.
+
+- **Publisher never reconnected**: the user-store change publisher connected
+  once at startup and had no recovery path, so a broker restart, or a cold start
+  where RabbitMQ answers its healthcheck before definitions are applied, would
+  disable change announcements for the life of the process. It now connects on
+  first use and reconnects after a failure, matching the subscriber.
+
+- **Documented settings were not wired into Compose**: `USER_SYNC_ENABLED`,
+  `USER_SYNC_EXCHANGE`, and `STORAGE_INSECURE_SKIP_CAS_PREFLIGHT` are now passed
+  through to the container in both Compose files. Without this, setting them in
+  `.env` had no effect — which would have been worst for the preflight escape
+  hatch, needed precisely when the API refuses to start.
+
+### Added
+
+- **User store invalidation**: after a successful write the new version is
+  announced on a new `reliquary.userstore` fanout exchange, so other replicas
+  reload within a round trip instead of waiting out the 30s periodic reload.
+  Strictly an optimisation — correctness comes from the conditional write.
+  Publishes are non-mandatory and transient, a failure to announce never fails
+  the mutation, and the periodic reload remains the backstop. Each replica
+  declares its own exclusive, auto-delete queue at runtime; this is the one
+  queue not predeclared in the infrastructure definitions, because it exists
+  only for the life of one connection.
+
+- **Conditional write preflight**: the API and `reliquary-user` verify at
+  startup that the object storage backend actually enforces `If-Match` and
+  `If-None-Match`, and refuse to start if it does not. A backend that accepts
+  the headers and ignores them is the dangerous case — writes succeed, no error
+  is raised, and the lost updates return silently with every test still passing.
+  `STORAGE_INSECURE_SKIP_CAS_PREFLIGHT=true` opts out, accepting that risk.
+  Verified against MinIO; AWS S3 added both conditions in 2024.
+
+- New `reliquary.userstore` exchange in both `infra/rabbitmq.nix` and
+  `docker/rabbitmq-definitions.json`.
+
+### Changed
+
+- **A corrupt `admin/users.json` is now fatal at startup** rather than silently
+  ignored. Previously an unparseable object left the store empty, `Seed` created
+  a fresh admin, and the first write overwrote the corrupt object — destroying
+  the account file. Refusing to boot is recoverable; that was not.
+
+- `UserStore` takes a narrow storage interface instead of a concrete
+  `*storage.Client`, so the persistence round trip is exercisable in tests. No
+  behaviour change on its own; it is what made the defect above reproducible.
+
+### Known Limitations
+
+- `storage/file_index.go` and `storage/checksum_index.go` share the read-modify-
+  rewrite design that caused this defect. Both are per-user, so contention is
+  much lower, and neither has a second writer today. The conditional-write
+  primitives they would need now exist; porting them is follow-up work.
+
 ## [v0.4.2] - 2026-08-14
 
 ### Fixed

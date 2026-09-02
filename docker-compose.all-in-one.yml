@@ -28,6 +28,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-reliquary}
       MINIO_PORT: 9000
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      STORAGE_INSECURE_SKIP_CAS_PREFLIGHT: ${STORAGE_INSECURE_SKIP_CAS_PREFLIGHT:-}
+      USER_SYNC_ENABLED: ${USER_SYNC_ENABLED:-true}
+      USER_SYNC_EXCHANGE: ${USER_SYNC_EXCHANGE:-reliquary.userstore}
       EVENTS_ENABLED: ${EVENTS_ENABLED:-true}
       EVENT_QUEUE: ${EVENT_QUEUE:-engram.ingest}
       EVENT_DEVICE_NAME: ${EVENT_DEVICE_NAME:-reliquary}

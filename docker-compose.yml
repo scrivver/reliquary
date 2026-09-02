@@ -43,7 +43,7 @@ services:
         mc mb --ignore-existing "reliquary/$$MINIO_BUCKET"
 
   api:
-    image: ghcr.io/scrivver/reliquary-api:v0.4.1
+    image: ghcr.io/scrivver/reliquary-api:v0.5.0
     restart: unless-stopped
     depends_on:
       rabbitmq:
@@ -59,6 +59,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-me-in-production}
       MINIO_BUCKET: ${MINIO_BUCKET:-reliquary}
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      STORAGE_INSECURE_SKIP_CAS_PREFLIGHT: ${STORAGE_INSECURE_SKIP_CAS_PREFLIGHT:-}
+      USER_SYNC_ENABLED: ${USER_SYNC_ENABLED:-true}
+      USER_SYNC_EXCHANGE: ${USER_SYNC_EXCHANGE:-reliquary.userstore}
       EVENTS_ENABLED: ${EVENTS_ENABLED:-true}
       EVENT_QUEUE: ${EVENT_QUEUE:-engram.ingest}
       EVENT_DEVICE_NAME: ${EVENT_DEVICE_NAME:-reliquary}
@@ -90,7 +93,7 @@ services:
       retries: 12
 
   thumbnail-worker:
-    image: ghcr.io/scrivver/reliquary-thumbnail-worker:v0.4.1
+    image: ghcr.io/scrivver/reliquary-thumbnail-worker:v0.5.0
     restart: unless-stopped
     tmpfs:
       - /tmp:size=512m,mode=1777
@@ -118,7 +121,7 @@ services:
       retries: 3
 
   ingress:
-    image: ghcr.io/scrivver/reliquary-web:v0.4.1
+    image: ghcr.io/scrivver/reliquary-web:v0.5.0
     restart: unless-stopped
     depends_on:
       api:

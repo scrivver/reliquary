@@ -177,3 +177,74 @@ func waitFor(t *testing.T, ctx context.Context, cond func() bool) {
 	}
 	t.Fatal("timed out waiting for condition")
 }
+
+// TestIntegrationNotifierConnectsLazily covers the cold-start case: a Notifier
+// built before the exchange exists must still work once it appears, rather than
+// having failed permanently at construction.
+func TestIntegrationNotifierConnectsLazily(t *testing.T) {
+	url := integrationURL(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	missing := "reliquary.userstore.not-yet-" + NewOrigin("x")
+	n := NewNotifier(url, missing, "api-lazy")
+	defer n.Close()
+
+	// Constructing must not have connected, and the first attempt fails
+	// because the exchange is absent.
+	if err := n.NotifyChanged(ctx, "etag-1"); err == nil {
+		t.Fatal("expected a failure while the exchange does not exist")
+	}
+
+	// The exchange appears, as it would once definitions are applied.
+	conn, err := amqp.Dial(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ch, err := conn.Channel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ch.ExchangeDeclare(missing, amqp.ExchangeFanout, true, false, false, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	defer ch.ExchangeDelete(missing, false, false)
+
+	// The same Notifier must now recover without being rebuilt.
+	if err := n.NotifyChanged(ctx, "etag-2"); err != nil {
+		t.Fatalf("notifier did not recover once the exchange existed: %v", err)
+	}
+}
+
+// TestIntegrationNotifierRecoversFromDroppedConnection covers a broker restart:
+// the publish side must reconnect the way the subscriber does.
+func TestIntegrationNotifierRecoversFromDroppedConnection(t *testing.T) {
+	url := integrationURL(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	n := NewNotifier(url, testExchange, "api-recover")
+	defer n.Close()
+
+	if err := n.NotifyChanged(ctx, "etag-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Kill the underlying connection the way a broker restart would.
+	n.mu.Lock()
+	pub := n.pub
+	n.mu.Unlock()
+	if pub == nil {
+		t.Fatal("expected a live publisher")
+	}
+	if err := pub.conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first attempt after the drop may fail; the next must succeed.
+	_ = n.NotifyChanged(ctx, "etag-2")
+	if err := n.NotifyChanged(ctx, "etag-3"); err != nil {
+		t.Fatalf("notifier never recovered from a dropped connection: %v", err)
+	}
+}

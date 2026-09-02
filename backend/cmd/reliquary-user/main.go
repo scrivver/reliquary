@@ -77,16 +77,9 @@ func create(args []string, role auth.Role) error {
 	// broker would be a real regression in what it can be used for. The write
 	// itself is already safe under compare-and-swap.
 	if cfg.UserSyncEnabled {
-		publisher, err := usersync.NewPublisher(cfg.RabbitMQURL, cfg.UserSyncExchange, usersync.NewOrigin("cli"))
-		if err != nil {
-			slog.Warn(
-				"could not announce the change; running replicas will pick it up on their next reload",
-				"error", err,
-			)
-		} else {
-			defer publisher.Close()
-			users.SetChangeNotifier(publisher)
-		}
+		notifier := usersync.NewNotifier(cfg.RabbitMQURL, cfg.UserSyncExchange, usersync.NewOrigin("cli"))
+		defer notifier.Close()
+		users.SetChangeNotifier(notifier)
 	}
 
 	if err := users.Load(context.Background()); err != nil {

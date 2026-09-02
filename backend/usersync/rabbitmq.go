@@ -237,3 +237,64 @@ func (s *Subscriber) handle(ctx context.Context, body []byte) {
 	}
 	slog.Info("user store reloaded after change by another writer", "origin", change.Origin)
 }
+
+// Notifier is a ChangeNotifier that connects on first use and reconnects after
+// a failure.
+//
+// It exists because connecting eagerly at startup has two failure modes that
+// are both permanent for the life of the process. On a cold `docker compose
+// up`, the broker can answer its healthcheck before the definitions naming this
+// exchange have been applied, so an eager connect fails and invalidation never
+// starts. And if the broker restarts later, an already-open publisher never
+// recovers — the subscriber reconnects, but the publish side would not.
+//
+// Connecting lazily and dropping the connection on error makes both
+// self-healing: the next mutation reconnects. Failures still surface to the
+// caller, which logs them and carries on, because announcing a change is
+// best-effort by design.
+type Notifier struct {
+	amqpURL  string
+	exchange string
+	origin   string
+
+	mu  sync.Mutex
+	pub *Publisher
+}
+
+func NewNotifier(amqpURL, exchange, origin string) *Notifier {
+	return &Notifier{amqpURL: amqpURL, exchange: exchange, origin: origin}
+}
+
+func (n *Notifier) NotifyChanged(ctx context.Context, etag string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	if n.pub == nil {
+		pub, err := NewPublisher(n.amqpURL, n.exchange, n.origin)
+		if err != nil {
+			return err
+		}
+		n.pub = pub
+	}
+
+	if err := n.pub.NotifyChanged(ctx, etag); err != nil {
+		// The connection may be the reason. Drop it so the next call rebuilds
+		// it rather than failing identically forever.
+		n.pub.Close()
+		n.pub = nil
+		return err
+	}
+	return nil
+}
+
+func (n *Notifier) Close() error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	if n.pub == nil {
+		return nil
+	}
+	err := n.pub.Close()
+	n.pub = nil
+	return err
+}
